@@ -35,6 +35,7 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
   const setHover = useAppStore((s) => s.setHover)
   const setProbeIndex = useAppStore((s) => s.setProbeIndex)
   const [showErosion, setShowErosion] = useState(false)
+  const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const frameRef = useRef<Frame | null>(null)
 
   // sea level (grid3d only), fetched once
@@ -63,7 +64,7 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover])
+  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme])
 
   // pointer position -> index along the section
   const indexAt = (e: React.MouseEvent<HTMLCanvasElement>): number | null => {

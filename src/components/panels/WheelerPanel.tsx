@@ -32,6 +32,7 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
   const setProbeIndex = useAppStore((s) => s.setProbeIndex)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const state = useSection(dataset)
+  const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const timesRef = useRef<Float64Array | null>(null)
   const frameRef = useRef<Frame | null>(null)
 
@@ -56,7 +57,7 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, hover])
+  }, [state, timeStep, probeIndex, dataset, hover, uiTheme])
 
   /** pointer -> {index along section, time step} using the actual frame */
   const locate = (e: React.MouseEvent<HTMLCanvasElement>) => {

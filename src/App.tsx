@@ -11,10 +11,17 @@ export default function App() {
   const init = useAppStore((s) => s.init)
   const dataset = useAppStore((s) => s.dataset)
   const loadError = useAppStore((s) => s.loadError)
+  const theme = useAppStore((s) => s.theme)
 
   useEffect(() => {
     void init()
   }, [init])
+
+  // theme lives on <html> so CSS variables (and the canvases reading them)
+  // all flip together
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
 
   usePlaybackLoop()
   useKeyboardShortcuts()

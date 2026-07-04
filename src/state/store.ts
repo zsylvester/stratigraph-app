@@ -34,6 +34,9 @@ interface AppState {
    */
   hover: { index: number; time: number | null } | null
 
+  /** color theme; canvases subscribe so they redraw when it flips */
+  theme: 'light' | 'dark'
+
   init: () => Promise<void>
   selectDataset: (id: string) => Promise<void>
   setTimeStep: (t: number) => void
@@ -45,6 +48,13 @@ interface AppState {
   setProbeIndex: (i: number) => void
   setSectionColorMode: (m: 'age' | 'facies') => void
   setHover: (h: { index: number; time: number | null } | null) => void
+  toggleTheme: () => void
+}
+
+function initialTheme(): 'light' | 'dark' {
+  const stored = localStorage.getItem('stratigraph-theme')
+  if (stored === 'light' || stored === 'dark') return stored
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 /** length of a section (number of points) for the current axis */
@@ -81,6 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   probeIndex: 0,
   sectionColorMode: 'age',
   hover: null,
+  theme: initialTheme(),
 
   init: async () => {
     try {
@@ -167,4 +178,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSectionColorMode: (m) => set({ sectionColorMode: m }),
 
   setHover: (h) => set({ hover: h }),
+
+  toggleTheme: () => {
+    const theme = get().theme === 'light' ? 'dark' : 'light'
+    localStorage.setItem('stratigraph-theme', theme)
+    set({ theme })
+  },
 }))

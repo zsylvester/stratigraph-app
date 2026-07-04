@@ -6,7 +6,7 @@ import type { SpaceGrid3d } from '../../data/types'
 import { drawHColorbar } from '../../plot/colorbar'
 import { boxBlur3, contourLevels, drawContour } from '../../plot/contours'
 import { themeColors } from '../../plot/frame'
-import { deepR } from '../../strat/colormaps'
+import { deepR, hexToRgb } from '../../strat/colormaps'
 import { useAppStore } from '../../state/store'
 
 type MapMode = 'topography' | 'thickness'
@@ -37,6 +37,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const hover = useAppStore((s) => s.hover)
   const setHover = useAppStore((s) => s.setHover)
   const [mode, setMode] = useState<MapMode>('topography')
+  const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const [volumes, setVolumes] = useState<Volumes | null>(null)
   const [field, setField] = useState<{ data: Float32Array; k: number; mode: MapMode } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -119,7 +120,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover])
+  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme])
 
   const moveSection = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -233,6 +234,8 @@ function drawMap(
   const { data, k, mode } = field
   const sl = volumes.seaLevel[k]
   const [vmin, vmax] = mode === 'topography' ? volumes.topoRange : volumes.thicknessRange
+  const [pr, pg, pb] = hexToRgb(theme.paper) // subaerial wash target
+  const [ir, ig, ib] = hexToRgb(theme.ink) // contour line color
 
   // fill
   const img = new ImageData(nCols, nRows)
@@ -246,10 +249,10 @@ function drawMap(
       }
       let [rr, gg, bb] = deepR((v - vmin) / (vmax - vmin || 1))
       if (mode === 'topography' && v >= sl) {
-        // subaerial: wash toward paper so land reads differently from water
-        rr = rr + (246 - rr) * 0.55
-        gg = gg + (241 - gg) * 0.55
-        bb = bb + (231 - bb) * 0.55
+        // subaerial: wash toward the paper color so land reads as land
+        rr = rr + (pr - rr) * 0.55
+        gg = gg + (pg - gg) * 0.55
+        bb = bb + (pb - bb) * 0.55
       }
       img.data[p] = rr
       img.data[p + 1] = gg
@@ -279,7 +282,7 @@ function drawMap(
     ((col + 0.5) / nCols) * w,
     ((row + 0.5) / nRows) * h,
   ]
-  ctx.strokeStyle = 'rgba(42, 35, 24, 0.45)'
+  ctx.strokeStyle = `rgba(${ir}, ${ig}, ${ib}, 0.45)`
   ctx.lineWidth = 0.7
   for (const level of contourLevels(vmin, vmax, 28)) {
     if (mode === 'thickness' && level <= 0) continue

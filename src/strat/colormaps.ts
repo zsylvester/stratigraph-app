@@ -50,6 +50,11 @@ export function css(c: RGB): string {
   return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`
 }
 
+/** parse '#rrggbb' (as stored in the theme CSS variables) */
+export function hexToRgb(h: string): RGB {
+  return hex(h)
+}
+
 /**
  * Facies colors by water depth at deposition (topset / foreset / bottomset),
  * as in the stratigraph package's list_of_colors.

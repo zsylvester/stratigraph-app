@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Dataset } from '../../data/loader'
 import { drawFrame, makeFrame, setupCanvas, themeColors, xPix, yPix } from '../../plot/frame'
 import { classify, retroDeform } from '../../strat/core'
-import { css, FACIES_COLORS, faciesFromDepth, viridis } from '../../strat/colormaps'
+import { css, FACIES_COLORS, faciesFromDepth, hexToRgb, viridis } from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { sectionLength, useAppStore } from '../../state/store'
 
@@ -31,6 +31,7 @@ export function BarrellPanel({ dataset }: { dataset: Dataset }) {
   const sectionState = useSection(dataset)
   const [curve, setCurve] = useState<Curve | null>(null)
   const [showScan, setShowScan] = useState(false)
+  const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const scanRef = useRef<{ img: HTMLImageElement; extent: number[] } | null>(null)
 
   const m = dataset.manifest
@@ -97,7 +98,7 @@ export function BarrellPanel({ dataset }: { dataset: Dataset }) {
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [curve, timeStep, dataset, colorMode, hover, showScan])
+  }, [curve, timeStep, dataset, colorMode, hover, showScan, uiTheme])
 
   return (
     <div className="panel__body">
@@ -189,15 +190,24 @@ function drawBarrell(
   ctx.rect(f.x0, f.y0, f.w, f.h)
   ctx.clip()
 
-  // original 1917 figure scan behind the curve
+  // original 1917 figure scan behind the curve; on dark paper, invert the
+  // black-on-white scan and screen it so the linework reads as light lines
   if (scan) {
     const [sx0, sx1, sy0, sy1] = scan.extent
     const px0 = xPix(f, sx0)
     const px1 = xPix(f, sx1)
     const py0 = yPix(f, sy0)
     const py1 = yPix(f, sy1)
-    ctx.globalCompositeOperation = 'multiply'
+    const [pr, pg, pb] = hexToRgb(theme.paper)
+    const darkPaper = 0.299 * pr + 0.587 * pg + 0.114 * pb < 128
+    if (darkPaper) {
+      ctx.filter = 'invert(1)'
+      ctx.globalCompositeOperation = 'screen'
+    } else {
+      ctx.globalCompositeOperation = 'multiply'
+    }
     ctx.drawImage(scan.img, px0, py1, px1 - px0, py0 - py1)
+    ctx.filter = 'none'
     ctx.globalCompositeOperation = 'source-over'
   }
 

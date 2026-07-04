@@ -21,6 +21,7 @@ export function TimelineBar() {
 
   const [times, setTimes] = useState<Float64Array | null>(null)
   const [signal, setSignal] = useState<Float32Array | null>(null)
+  const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // load the time vector and the context signal when the dataset changes
@@ -49,7 +50,7 @@ export function TimelineBar() {
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [signal, timeStep, dataset])
+  }, [signal, timeStep, dataset, uiTheme])
 
   if (!dataset) return <footer className="timeline" />
 

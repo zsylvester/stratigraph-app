@@ -5,6 +5,8 @@ export function Header() {
   const datasetId = useAppStore((s) => s.datasetId)
   const dataset = useAppStore((s) => s.dataset)
   const selectDataset = useAppStore((s) => s.selectDataset)
+  const theme = useAppStore((s) => s.theme)
+  const toggleTheme = useAppStore((s) => s.toggleTheme)
 
   return (
     <>
@@ -30,12 +32,56 @@ export function Header() {
             </button>
           ))}
         </nav>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          title={`switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          aria-label="toggle color theme"
+        >
+          {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+        </button>
       </header>
       <div className="subhead">
         <span className="subhead__desc">{dataset?.manifest.description ?? '…'}</span>
         <span className="subhead__cite">{dataset?.manifest.citation ?? ''}</span>
       </div>
     </>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <path
+        d="M12 8.6A5.5 5.5 0 0 1 5.4 2 5.5 5.5 0 1 0 12 8.6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function SunIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <circle cx="7" cy="7" r="3" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i * Math.PI) / 4
+        return (
+          <line
+            key={i}
+            x1={7 + Math.cos(a) * 4.6}
+            y1={7 + Math.sin(a) * 4.6}
+            x2={7 + Math.cos(a) * 6.3}
+            y2={7 + Math.sin(a) * 6.3}
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+        )
+      })}
+    </svg>
   )
 }
 

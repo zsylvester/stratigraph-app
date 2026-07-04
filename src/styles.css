@@ -28,6 +28,28 @@
   --timeline-h: 108px;
 }
 
+/* dark instrument: same warm field-notebook character, night shift */
+:root[data-theme='dark'] {
+  --paper: #211c14;
+  --paper-2: #2a2419;
+  --paper-3: #372f20;
+  --line: #453c2a;
+  --line-strong: #5f543c;
+  --ink: #ece3cf;
+  --ink-soft: #a1937a;
+  --ink-faint: #6f6350;
+
+  --dep: #5d8cc0;
+  --ero: #c4653a;
+  --vac: #6f6656;
+}
+
+:root[data-theme='dark'] .header__logo {
+  /* black-line PNG becomes light linework on dark paper */
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -143,6 +165,26 @@ body {
 .picker__btn.is-active {
   background: var(--ink);
   color: var(--paper);
+}
+
+.theme-toggle {
+  appearance: none;
+  align-self: center;
+  margin-right: 20px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--paper-3);
+  color: var(--ink);
 }
 
 /* ------------------------------ subheader ------------------------------- */
