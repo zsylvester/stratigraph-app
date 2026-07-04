@@ -202,6 +202,17 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     setYZoom(null)
   }
 
+  /** button zoom: in/out anchored at the center of the current view */
+  const zoomBy = (factor: number) => {
+    const canvas = canvasRef.current
+    const f = frameRef.current
+    if (!canvas || !f) return
+    const rect = canvas.getBoundingClientRect()
+    const cx = rect.left + f.x0 + f.w / 2
+    const cy = rect.top + f.y0 + f.h / 2
+    applyView(cx, cy, cx, cy, factor)
+  }
+
   // the native wheel listener is registered once; reach the latest applyView
   // (which closes over equalAxes) through a ref
   const applyViewRef = useRef(applyView)
@@ -263,6 +274,14 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
               {mode}
             </button>
           ))}
+        </div>
+        <div className="seg">
+          <button className="seg__btn" onClick={() => zoomBy(1 / 0.65)} title="zoom out">
+            −
+          </button>
+          <button className="seg__btn" onClick={() => zoomBy(0.65)} title="zoom in">
+            +
+          </button>
         </div>
         {(xZoom || yZoom) && (
           <button className="seg__btn seg__btn--solo" onClick={resetZoom} title="reset zoom (double-click)">
@@ -488,30 +507,6 @@ function drawSection(
     }
   }
 
-  // erosional surfaces: the preserved horizon of time i is a truncation
-  // surface wherever the original time-i topography lay above it (vacuity)
-  if (showErosion) {
-    const thresh = m.processing.resolution
-    ctx.strokeStyle = theme.ero
-    ctx.lineWidth = 1.1
-    ctx.beginPath()
-    for (let i = 1; i <= kk; i++) {
-      let pen = false
-      for (let j = 0; j < n; j++) {
-        if (topoS[j * nt + i] - strat[j * nt + i] > thresh) {
-          const px = xPix(f, x[j])
-          const py = yPix(f, strat[j * nt + i])
-          if (pen) ctx.lineTo(px, py)
-          else ctx.moveTo(px, py)
-          pen = true
-        } else {
-          pen = false
-        }
-      }
-    }
-    ctx.stroke()
-  }
-
   // thin black stratigraphic surface lines (condensed zones read darker);
   // the manifest's key surfaces (originally digitized) are drawn heavier
   const keys = new Set<number>(m.keySurfaceIndices ?? [])
@@ -556,6 +551,31 @@ function drawSection(
     ctx.setLineDash([5, 4])
     ctx.stroke()
     ctx.setLineDash([])
+  }
+
+  // erosional surfaces, drawn ON TOP of the layer/surface lines so they stay
+  // visible: the preserved horizon of time i is a truncation surface wherever
+  // the original time-i topography lay above it (vacuity)
+  if (showErosion) {
+    const thresh = m.processing.resolution
+    ctx.strokeStyle = theme.ero
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    for (let i = 1; i <= kk; i++) {
+      let pen = false
+      for (let j = 0; j < n; j++) {
+        if (topoS[j * nt + i] - strat[j * nt + i] > thresh) {
+          const px = xPix(f, x[j])
+          const py = yPix(f, strat[j * nt + i])
+          if (pen) ctx.lineTo(px, py)
+          else ctx.moveTo(px, py)
+          pen = true
+        } else {
+          pen = false
+        }
+      }
+    }
+    ctx.stroke()
   }
 
   // probe location marker (where the Barrell plot samples)
