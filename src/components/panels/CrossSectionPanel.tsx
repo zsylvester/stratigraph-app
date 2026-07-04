@@ -93,47 +93,49 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     return Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
   }
 
-  /** zoomed range for one axis, anchored at a fractional position; null = full */
-  const applyZoom = (
-    lo: number, hi: number, dLo: number, dHi: number, anchorFrac: number, factor: number,
-  ): [number, number] | null => {
-    const defSpan = dHi - dLo
-    let span = (hi - lo) * factor
-    span = Math.min(defSpan, Math.max(defSpan / 80, span))
-    if (span >= defSpan * 0.999) return null
-    let nLo = lo + anchorFrac * (hi - lo) - anchorFrac * span
-    nLo = Math.max(dLo, Math.min(dHi - span, nLo))
-    return [nLo, nLo + span]
-  }
-
-  const zoomAt = (clientX: number, clientY: number, factor: number) => {
+  /**
+   * One view update combining scale and translation: the data point that was
+   * under (oldX, oldY) ends up under (newX, newY) with spans scaled by factor.
+   * Pure pan is factor=1; wheel zoom passes old == new. Doing both in a single
+   * state update per axis avoids the pinch bug where a pan computed from a
+   * stale frame overwrote the zoom applied in the same pointer event.
+   */
+  const applyView = (
+    newX: number, newY: number, oldX: number, oldY: number, factor: number,
+  ) => {
     const f = frameRef.current
     const d = defaultsRef.current
     const canvas = canvasRef.current
     if (!f || !d || !canvas) return
     const rect = canvas.getBoundingClientRect()
-    const fx = Math.min(1, Math.max(0, (clientX - rect.left - f.x0) / f.w))
-    const fy = Math.min(1, Math.max(0, 1 - (clientY - rect.top - f.y0) / f.h))
-    setXZoom(applyZoom(f.xMin, f.xMax, d.x0, d.x1, fx, factor))
-    setYZoom(applyZoom(f.yMin, f.yMax, d.y0, d.y1, fy, factor))
-  }
 
-  const panBy = (dxPx: number, dyPx: number) => {
-    const f = frameRef.current
-    const d = defaultsRef.current
-    if (!f || !d) return
-    const xSpan = f.xMax - f.xMin
-    if (xSpan < d.x1 - d.x0 - 1e-9) {
-      let lo = f.xMin - (dxPx / f.w) * xSpan
-      lo = Math.max(d.x0, Math.min(d.x1 - xSpan, lo))
-      setXZoom([lo, lo + xSpan])
+    const axis = (
+      lo: number, hi: number, dLo: number, dHi: number,
+      fracOld: number, fracNew: number,
+    ): [number, number] | null => {
+      const defSpan = dHi - dLo
+      const span = Math.min(defSpan, Math.max(defSpan / 80, (hi - lo) * factor))
+      if (span >= defSpan * 0.999) return null
+      const anchor = lo + fracOld * (hi - lo)
+      let nLo = anchor - fracNew * span
+      nLo = Math.max(dLo, Math.min(dHi - span, nLo))
+      return [nLo, nLo + span]
     }
-    const ySpan = f.yMax - f.yMin
-    if (ySpan < d.y1 - d.y0 - 1e-9) {
-      let lo = f.yMin + (dyPx / f.h) * ySpan // canvas y grows downward
-      lo = Math.max(d.y0, Math.min(d.y1 - ySpan, lo))
-      setYZoom([lo, lo + ySpan])
-    }
+
+    setXZoom(
+      axis(
+        f.xMin, f.xMax, d.x0, d.x1,
+        (oldX - rect.left - f.x0) / f.w,
+        (newX - rect.left - f.x0) / f.w,
+      ),
+    )
+    setYZoom(
+      axis(
+        f.yMin, f.yMax, d.y0, d.y1,
+        1 - (oldY - rect.top - f.y0) / f.h,
+        1 - (newY - rect.top - f.y0) / f.h,
+      ),
+    )
   }
 
   const resetZoom = () => {
@@ -147,7 +149,7 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     if (!canvas) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015))
+      applyView(e.clientX, e.clientY, e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015))
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
@@ -214,19 +216,20 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
             const dx = e.clientX - prev.x
             const dy = e.clientY - prev.y
             if (Math.abs(dx) + Math.abs(dy) > 2) movedRef.current = true
-            if (movedRef.current) panBy(dx, dy)
+            if (movedRef.current) applyView(e.clientX, e.clientY, prev.x, prev.y, 1)
           } else if (pts.size === 2 && oldPts.length === 2) {
-            // pinch: scale from distance ratio, pan from midpoint motion
+            // pinch: scale from distance ratio, translate from midpoint motion
             movedRef.current = true
             const newPts = [...pts.values()]
             const dist = (p: { x: number; y: number }[]) => Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)
             const mid = (p: { x: number; y: number }[]) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 })
             const oldD = dist(oldPts)
             const newD = dist(newPts)
-            const m = mid(newPts)
-            if (oldD > 0 && newD > 0) zoomAt(m.x, m.y, oldD / newD)
-            const mo = mid(oldPts)
-            panBy(m.x - mo.x, m.y - mo.y)
+            if (oldD > 0 && newD > 0) {
+              const m = mid(newPts)
+              const mo = mid(oldPts)
+              applyView(m.x, m.y, mo.x, mo.y, oldD / newD)
+            }
           }
         }}
         onPointerUp={(e) => {
