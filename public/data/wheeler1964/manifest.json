@@ -1,0 +1,76 @@
+{
+  "id": "wheeler1964",
+  "name": "Wheeler (1964) diagram reconstruction",
+  "description": "Topographic surfaces digitized from Harry Wheeler's 1964 baselevel-transit figure, with a reconstructed basement-uplift history; the basis for reconstructing his chronostratigraphic diagram.",
+  "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 3-5",
+  "kind": "section2d",
+  "elevationUnits": "m",
+  "space": {
+    "nx": 89,
+    "dx": 50.0,
+    "x0": 6.210681217127077,
+    "units": "m"
+  },
+  "time": {
+    "n": 37,
+    "units": "years",
+    "displayUnits": "Myr",
+    "displayFactor": 1e-06,
+    "array": "time"
+  },
+  "processing": {
+    "resolution": 0.1,
+    "note": "Wheeler diagram is computed on topo as stored (no retro-deformation), matching the notebook; cross sections at time step k use topo[i] + subsid[k] - subsid[i]."
+  },
+  "keySurfaceIndices": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    28,
+    32,
+    36
+  ],
+  "arrays": {
+    "time": {
+      "path": "arrays/time.bin",
+      "shape": [
+        37
+      ],
+      "dtype": "float64"
+    },
+    "topo": {
+      "path": "arrays/topo.bin",
+      "shape": [
+        37,
+        89
+      ],
+      "dtype": "float32"
+    },
+    "subsid": {
+      "path": "arrays/subsid.bin",
+      "shape": [
+        37,
+        89
+      ],
+      "dtype": "float32"
+    }
+  },
+  "views": {
+    "section": {
+      "bottom": -260.0,
+      "ylim": [
+        -260.0,
+        1600.0
+      ],
+      "surfaceLineEvery": 4
+    },
+    "wheeler": {
+      "vmin": -100.0,
+      "vmax": 100.0
+    }
+  }
+}

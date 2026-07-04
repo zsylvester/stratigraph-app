@@ -1,0 +1,22 @@
+{
+  "datasets": [
+    {
+      "id": "barrell",
+      "name": "Barrell (1917) elevation curve",
+      "description": "Reconstruction of the sediment-surface elevation curve from Joseph Barrell's 1917 'Rhythms and the measurement of geologic time' (Fig. 5), used to derive his stratigraphic column.",
+      "path": "barrell/"
+    },
+    {
+      "id": "wheeler1964",
+      "name": "Wheeler (1964) diagram reconstruction",
+      "description": "Topographic surfaces digitized from Harry Wheeler's 1964 baselevel-transit figure, with a reconstructed basement-uplift history; the basis for reconstructing his chronostratigraphic diagram.",
+      "path": "wheeler1964/"
+    },
+    {
+      "id": "xes02",
+      "name": "XES-02 experiment",
+      "description": "Topography and basement scans from the XES-02 subsiding-basin flume experiment (St. Anthony Falls Laboratory / Tulane), resampled to 1-hour time steps; sea level history included.",
+      "path": "xes02/"
+    }
+  ]
+}

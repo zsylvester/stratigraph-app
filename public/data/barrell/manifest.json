@@ -1,0 +1,51 @@
+{
+  "id": "barrell",
+  "name": "Barrell (1917) elevation curve",
+  "description": "Reconstruction of the sediment-surface elevation curve from Joseph Barrell's 1917 'Rhythms and the measurement of geologic time' (Fig. 5), used to derive his stratigraphic column.",
+  "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Fig. 2",
+  "kind": "curve1d",
+  "elevationUnits": "m",
+  "time": {
+    "n": 1000,
+    "units": "years",
+    "displayUnits": "years",
+    "displayFactor": 1.0,
+    "array": "time"
+  },
+  "processing": {
+    "resolution": 0.0001
+  },
+  "arrays": {
+    "time": {
+      "path": "arrays/time.bin",
+      "shape": [
+        1000
+      ],
+      "dtype": "float64"
+    },
+    "elevation": {
+      "path": "arrays/elevation.bin",
+      "shape": [
+        1000
+      ],
+      "dtype": "float64"
+    }
+  },
+  "assets": {
+    "barrellOriginal": {
+      "path": "assets/barrell_original.png",
+      "extent": [
+        0.0,
+        1000000.0,
+        0.0,
+        175.03173358348602
+      ]
+    }
+  },
+  "views": {
+    "barrell": {
+      "maxElevation": 175.03173358348602,
+      "maxTime": 1000000.0
+    }
+  }
+}

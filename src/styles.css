@@ -1,0 +1,562 @@
+/* ---------------------------------------------------------------------------
+   Stratigraph — design system
+   Field-notebook-meets-instrument: warm paper, ink, stratigraphic band motif.
+   Display: Fraunces. UI: IBM Plex Sans. Data readouts: IBM Plex Mono.
+--------------------------------------------------------------------------- */
+
+:root {
+  --paper: #f6f1e7;
+  --paper-2: #ede5d3;
+  --paper-3: #e4dac4;
+  --line: #d3c7ae;
+  --line-strong: #b5a888;
+  --ink: #2a2318;
+  --ink-soft: #7a6c54;
+  --ink-faint: #a99a7e;
+
+  /* the chronostratigraphic triad */
+  --dep: #3d6b9e;   /* deposition */
+  --ero: #a34a24;   /* erosion */
+  --vac: #b9b0a0;   /* vacuity */
+
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Menlo', monospace;
+
+  --header-h: 64px;
+  --subhead-h: 30px;
+  --timeline-h: 108px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 20% -10%, rgba(163, 74, 36, 0.045), transparent 60%),
+    radial-gradient(1000px 600px at 110% 110%, rgba(61, 107, 158, 0.05), transparent 55%),
+    var(--paper);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: var(--header-h) var(--subhead-h) 1fr var(--timeline-h);
+  height: 100%;
+}
+
+/* ------------------------------- header --------------------------------- */
+
+.header {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--paper);
+}
+
+.header__bands {
+  width: 16px;
+  flex: none;
+  background: linear-gradient(
+    to bottom,
+    var(--ero) 0 14%,
+    var(--dep) 14% 38%,
+    var(--vac) 38% 47%,
+    var(--dep) 47% 72%,
+    var(--ero) 72% 82%,
+    var(--vac) 82% 100%
+  );
+}
+
+.header__mast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+}
+
+.header__logo {
+  height: 46px;
+  display: block;
+  /* black-on-white PNG sits on the paper background */
+  mix-blend-mode: multiply;
+}
+
+.header__tagline {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 340;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.header__spacer {
+  flex: 1;
+}
+
+/* dataset picker: segmented control */
+.picker {
+  display: flex;
+  align-self: center;
+  margin-right: 20px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper-2);
+}
+
+.picker__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  padding: 8px 16px;
+  cursor: pointer;
+  border-right: 1px solid var(--line);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.picker__btn:last-child {
+  border-right: none;
+}
+
+.picker__btn:hover {
+  color: var(--ink);
+  background: var(--paper-3);
+}
+
+.picker__btn.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ------------------------------ subheader ------------------------------- */
+
+.subhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 0 36px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.subhead__desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subhead__cite {
+  margin-left: auto;
+  color: var(--ink-faint);
+  flex: none;
+}
+
+/* ------------------------------ panel grid ------------------------------ */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  min-height: 0;
+}
+
+.panel {
+  position: relative;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px 8px;
+}
+
+.panel__num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.panel__title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 14px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* technical-drawing corner tick on each panel */
+.panel::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid var(--line-strong);
+  border-right: 1px solid var(--line-strong);
+  pointer-events: none;
+}
+
+.panel.is-unavailable .panel__title {
+  color: var(--ink-faint);
+}
+
+/* ------------------------- placeholder content -------------------------- */
+
+.ph {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  border: 1px dashed var(--line);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 14px,
+      rgba(181, 168, 136, 0.07) 14px 15px
+    );
+  text-align: center;
+  padding: 18px;
+}
+
+.ph__glyph {
+  opacity: 0.85;
+}
+
+.ph__note {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-soft);
+  max-width: 40ch;
+}
+
+.ph__unavailable {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.ph__arrays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  padding: 3px 8px;
+}
+
+.chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.chip.is-ready .chip__dot {
+  background: var(--dep);
+}
+
+.chip.is-loading .chip__dot {
+  background: var(--ero);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+
+.chip.is-error .chip__dot {
+  background: var(--ero);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ------------------------------ plot panels ----------------------------- */
+
+.plot-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: block;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 8px;
+  flex: none;
+}
+
+.controls-row__label,
+.controls-row__readout {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.seg {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  background: var(--paper-2);
+  flex: none;
+}
+
+.seg__btn {
+  appearance: none;
+  border: none;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.seg__btn:last-child {
+  border-right: none;
+}
+
+/* standalone toggle button (outside a .seg group) */
+.seg__btn--solo {
+  border: 1px solid var(--line-strong);
+  background: var(--paper-2);
+  flex: none;
+}
+
+.seg__btn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
+.seg__btn.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.mini-slider {
+  flex: 1;
+  appearance: none;
+  height: 3px;
+  background: var(--line-strong);
+  outline: none;
+  min-width: 60px;
+}
+
+.mini-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ero);
+  cursor: pointer;
+}
+
+.map-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  cursor: crosshair;
+}
+
+/* ------------------------------- timeline ------------------------------- */
+
+.timeline {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  border-top: 1px solid var(--line-strong);
+  background: var(--paper-2);
+}
+
+.timeline__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tbtn {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.tbtn:hover {
+  background: var(--paper-3);
+}
+
+.tbtn--play {
+  background: var(--ero);
+  border-color: var(--ero);
+  color: var(--paper);
+  width: 34px;
+  height: 34px;
+}
+
+.tbtn--play:hover {
+  background: #8d3f1e;
+}
+
+.timeline__readout {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-left: 6px;
+  min-width: 180px;
+}
+
+.timeline__readout b {
+  font-weight: 500;
+  color: var(--ero);
+}
+
+.timeline__hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.speed {
+  display: flex;
+  gap: 2px;
+}
+
+.speed__btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.speed__btn.is-active {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: var(--paper);
+}
+
+.timeline__track {
+  position: relative;
+  min-height: 0;
+}
+
+.timeline__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* invisible range input laid over the canvas; custom thumb line */
+.timeline__slider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  appearance: none;
+  background: transparent;
+  cursor: crosshair;
+  margin: 0;
+}
+
+.timeline__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 3px;
+  height: 100%;
+  background: transparent;
+}
+
+.timeline__slider:focus {
+  outline: none;
+}
+
+/* ------------------------------ load/error ------------------------------ */
+
+.loading,
+.error {
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.error {
+  color: var(--ero);
+}

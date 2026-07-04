@@ -1,0 +1,17 @@
+{
+  "dipLoc": 130,
+  "strat": {
+    "path": "xes02_strat_dip130.bin",
+    "shape": [
+      111,
+      311
+    ]
+  },
+  "wheelerStrat": {
+    "path": "xes02_wheeler_strat_dip130.bin",
+    "shape": [
+      111,
+      310
+    ]
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "id": "xes02",
+  "name": "XES-02 experiment",
+  "description": "Topography and basement scans from the XES-02 subsiding-basin flume experiment (St. Anthony Falls Laboratory / Tulane), resampled to 1-hour time steps; sea level history included.",
+  "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 15-20",
+  "kind": "grid3d",
+  "elevationUnits": "mm",
+  "space": {
+    "shape": [
+      261,
+      111
+    ],
+    "spacing": [
+      10.0,
+      50.0
+    ],
+    "axes": [
+      "strike",
+      "dip"
+    ],
+    "units": "mm"
+  },
+  "time": {
+    "n": 311,
+    "units": "seconds",
+    "displayUnits": "hours",
+    "displayFactor": 0.0002777777777777778,
+    "array": "time"
+  },
+  "processing": {
+    "resolution": 0.5,
+    "samplingRate": 3600,
+    "note": "Cross sections / Wheeler diagrams at time step k use retro-deformed surfaces topo[i] + subsid[k] - subsid[i] for i <= k. faciesDepthBins are water depths (mm) separating topset/foreset/deep.",
+    "faciesDepthBins": [
+      0.0,
+      -100.0
+    ]
+  },
+  "arrays": {
+    "time": {
+      "path": "arrays/time.bin",
+      "shape": [
+        311
+      ],
+      "dtype": "float64"
+    },
+    "seaLevel": {
+      "path": "arrays/sea_level.bin",
+      "shape": [
+        311
+      ],
+      "dtype": "float64"
+    },
+    "topo": {
+      "path": "arrays/topo.bin",
+      "shape": [
+        261,
+        111,
+        311
+      ],
+      "dtype": "int16",
+      "scale": 0.018169696110908646,
+      "offset": -537.8993472319885,
+      "nan": -32768,
+      "maxAbsError": 0.009084848055454323
+    },
+    "subsid": {
+      "path": "arrays/subsid.bin",
+      "shape": [
+        261,
+        111,
+        311
+      ],
+      "dtype": "int16",
+      "scale": 0.01643723614509279,
+      "offset": -755.5915566429692,
+      "nan": -32768,
+      "maxAbsError": 0.008218618072546395
+    }
+  },
+  "derived": {
+    "wheelerClass": {
+      "path": "derived/wheelerClass.bin",
+      "dtype": "int8",
+      "shape": [
+        261,
+        111,
+        310
+      ],
+      "note": "+1 deposition, -1 erosion, 0 stasis; last axis = time intervals"
+    },
+    "depositionTime": {
+      "path": "derived/depositionTime.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    },
+    "erosionTime": {
+      "path": "derived/erosionTime.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    },
+    "stasisTime": {
+      "path": "derived/stasisTime.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    },
+    "vacuityTime": {
+      "path": "derived/vacuityTime.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    },
+    "depositionThickness": {
+      "path": "derived/depositionThickness.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    },
+    "erosionThickness": {
+      "path": "derived/erosionThickness.bin",
+      "shape": [
+        261,
+        111
+      ],
+      "dtype": "float32"
+    }
+  },
+  "views": {
+    "dipSection": {
+      "defaultLoc": 130,
+      "wheelerVmin": -10,
+      "wheelerVmax": 10
+    },
+    "strikeSection": {
+      "defaultLoc": 40,
+      "wheelerVmin": -10,
+      "wheelerVmax": 10
+    },
+    "wheelerMap": {
+      "vmin": -60,
+      "vmax": 60
+    },
+    "seaLevelPlot": {
+      "xlim": [
+        -100,
+        -370
+      ]
+    },
+    "maps": {
+      "depositionTime": {
+        "vmin": 0,
+        "vmax": 1
+      },
+      "erosionTime": {
+        "vmin": 0,
+        "vmax": 0.5
+      }
+    }
+  }
+}
