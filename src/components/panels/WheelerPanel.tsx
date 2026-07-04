@@ -129,11 +129,12 @@ function drawWheeler(
 
   const topoS = retroDeform(sec, kk)
   const strat = stratUpTo(topoS, n, nt, kk)
-  const ws = wheelerStrat(sec, topoS, strat, kk)
 
   const view = (m.views.dipSection ?? m.views.wheeler ?? {}) as Record<string, number>
   const vmax = Math.abs(view.wheelerVmax ?? view.vmax ?? 10)
   const vmin = -vmax
+  // rows can aggregate several intervals (e.g. meanderpy: one row per event)
+  const rowStep = (m.views.wheeler as { rowStep?: number } | undefined)?.rowStep ?? 1
 
   const tf = m.time.displayFactor
   const t0 = times ? times[0] * tf : 0
@@ -141,20 +142,35 @@ function drawWheeler(
   const [vx0, vx1] = xZoom ?? [x[0], x[n - 1]]
   const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, t0, t1)
 
-  // heatmap via offscreen ImageData (n wide, nt-1 tall; row i = interval i)
-  const img = new ImageData(n, nt - 1)
-  for (let i = 0; i < kk; i++) {
+  // heatmap via offscreen ImageData; one row per interval, or per rowStep
+  // intervals aggregated to their net change (preserved deposition from the
+  // strat diff, erosion from the raw topo diff — telescoping sums)
+  const nRowsImg = Math.floor((nt - 1) / rowStep)
+  const img = new ImageData(n, nRowsImg)
+  const eps = 1e-9
+  const ws = rowStep === 1 ? wheelerStrat(sec, topoS, strat, kk) : null
+  for (let r = 0; r < nRowsImg; r++) {
+    const i0 = r * rowStep
+    const i1 = Math.min(i0 + rowStep, nt - 1)
+    if (i1 > kk) break
     for (let j = 0; j < n; j++) {
-      const v = ws[j * (nt - 1) + i]
-      const [r, g, b] = wheelerColor(v, vmin, vmax)
-      const p = ((nt - 2 - i) * n + j) * 4 // row 0 of image = latest time (top)
-      img.data[p] = r
-      img.data[p + 1] = g
-      img.data[p + 2] = b
+      let v: number
+      if (ws) {
+        v = ws[j * (nt - 1) + i0]
+      } else {
+        const dep = strat[j * nt + i1] - strat[j * nt + i0]
+        const raw = topoS[j * nt + i1] - topoS[j * nt + i0]
+        v = dep > eps ? dep : raw < -eps ? raw : 0
+      }
+      const [rr, gg, bb] = wheelerColor(v, vmin, vmax)
+      const p = ((nRowsImg - 1 - r) * n + j) * 4 // row 0 of image = latest time
+      img.data[p] = rr
+      img.data[p + 1] = gg
+      img.data[p + 2] = bb
       img.data[p + 3] = 255
     }
   }
-  const off = new OffscreenCanvas(n, nt - 1)
+  const off = new OffscreenCanvas(n, nRowsImg)
   off.getContext('2d')!.putImageData(img, 0, 0)
 
   ctx.save()
@@ -166,7 +182,7 @@ function drawWheeler(
   const full = x[n - 1] - x[0]
   const sx = ((vx0 - x[0]) / full) * n
   const sw = ((vx1 - vx0) / full) * n
-  ctx.drawImage(off, sx, 0, sw, nt - 1, f.x0, f.y0, f.w, f.h)
+  ctx.drawImage(off, sx, 0, sw, nRowsImg, f.x0, f.y0, f.w, f.h)
 
   // time cursor
   const py = times ? yPix(f, times[kk] * tf) : yPix(f, kk)

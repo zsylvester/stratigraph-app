@@ -189,8 +189,10 @@ export async function section2d(dataset: Dataset): Promise<Section> {
 }
 
 /**
- * Elevation range of the final preserved stratigraphy (not the raw topographic
- * stack, whose eroded-away highs would waste plot space) — for stable framing.
+ * Elevation range for stable framing. Lower bound from the final preserved
+ * stratigraphy; upper bound must ALSO cover the raw topography, because the
+ * active surface displayed at time k is topo[k] itself, which can stand higher
+ * than anything ultimately preserved (later transgression/erosion removes it).
  */
 export function sectionBounds(sec: Section): { lo: number; hi: number } {
   const { n, nt } = sec
@@ -203,6 +205,9 @@ export function sectionBounds(sec: Section): { lo: number; hi: number } {
       if (v < lo) lo = v
       if (v > hi) hi = v
     }
+  }
+  for (const v of sec.topo) {
+    if (Number.isFinite(v) && v > hi) hi = v
   }
   return { lo, hi }
 }

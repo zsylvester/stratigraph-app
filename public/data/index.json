@@ -9,7 +9,7 @@
     {
       "id": "meanderpy",
       "name": "meanderpy channel-belt model",
-      "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (erosion, point bar, levee every 5 years); 30 m grid, elevations in meters.",
+      "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
       "path": "meanderpy/"
     },
     {

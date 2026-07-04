@@ -41,6 +41,13 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
   const setHover = useAppStore((s) => s.setHover)
   const setProbeIndex = useAppStore((s) => s.setProbeIndex)
   const [showErosion, setShowErosion] = useState(false)
+  // equal-scale axes (vertical exaggeration 1); manifest can set the default
+  const [equalAxes, setEqualAxes] = useState(false)
+  useEffect(() => {
+    setEqualAxes(
+      !!(dataset.manifest.views.section as { equalAxes?: boolean } | undefined)?.equalAxes,
+    )
+  }, [dataset])
   const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const frameRef = useRef<Frame | null>(null)
 
@@ -85,14 +92,37 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
       frameRef.current = drawSection(
         ctx, canvas, state, timeStep, probeIndex, seaLevelRef.current,
         layerFaciesRef.current, dataset, colorMode, showErosion, hover,
-        xZoom, yZoom, defaultsRef,
+        xZoom, yZoom, equalAxes, defaultsRef,
       )
     }
     draw()
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme, xZoom, yZoom])
+  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme, xZoom, yZoom, equalAxes])
+
+  // In 1:1 mode the full extent of a low-relief section is a hairline, so
+  // materialize a visible default window (sized by the relief, centered on
+  // the probe) into the shared xZoom — the Wheeler diagram follows along.
+  // Resetting zoom re-materializes it, i.e. reset returns to this view.
+  useEffect(() => {
+    if (!equalAxes || xZoom !== null || !state) return
+    const d = defaultsRef.current
+    const f = frameRef.current
+    if (!d || !f) return
+    // window a few geobodies wide (~40x the relief); sections are genuinely
+    // thin ribbons at true scale, so this is a starting point for zooming
+    const xspan = (d.y1 - d.y0) * 40
+    if (xspan >= (d.x1 - d.x0) * 0.999) return // whole section visible at 1:1
+    const { x, n } = state.section
+    const half = xspan / 2
+    const cx = Math.max(
+      d.x0 + half,
+      Math.min(d.x1 - half, x[Math.min(n - 1, probeIndex)]),
+    )
+    setXZoom([cx - half, cx + half])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equalAxes, xZoom, state])
 
   // pointer position -> index along the section (zoom-aware: via data coords)
   const indexAtPx = (clientX: number): number | null => {
@@ -137,20 +167,34 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
       return [nLo, nLo + span]
     }
 
-    setXZoom(
-      axis(
-        f.xMin, f.xMax, d.x0, d.x1,
-        (oldX - rect.left - f.x0) / f.w,
-        (newX - rect.left - f.x0) / f.w,
-      ),
+    const nx = axis(
+      f.xMin, f.xMax, d.x0, d.x1,
+      (oldX - rect.left - f.x0) / f.w,
+      (newX - rect.left - f.x0) / f.w,
     )
-    setYZoom(
-      axis(
-        f.yMin, f.yMax, d.y0, d.y1,
-        1 - (oldY - rect.top - f.y0) / f.h,
-        1 - (newY - rect.top - f.y0) / f.h,
-      ),
-    )
+    setXZoom(nx)
+    if (equalAxes) {
+      // the y span is derived from x; only the center is free (unclamped,
+      // since 1:1 spans routinely exceed the data's elevation range)
+      if (nx === null) {
+        setYZoom(null) // back to full extent: re-center vertically too
+      } else {
+        const fracOld = 1 - (oldY - rect.top - f.y0) / f.h
+        const fracNew = 1 - (newY - rect.top - f.y0) / f.h
+        const span = (f.yMax - f.yMin) * factor
+        const anchor = f.yMin + fracOld * (f.yMax - f.yMin)
+        const nLo = anchor - fracNew * span
+        setYZoom([nLo, nLo + span])
+      }
+    } else {
+      setYZoom(
+        axis(
+          f.yMin, f.yMax, d.y0, d.y1,
+          1 - (oldY - rect.top - f.y0) / f.h,
+          1 - (newY - rect.top - f.y0) / f.h,
+        ),
+      )
+    }
   }
 
   const resetZoom = () => {
@@ -158,18 +202,21 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     setYZoom(null)
   }
 
+  // the native wheel listener is registered once; reach the latest applyView
+  // (which closes over equalAxes) through a ref
+  const applyViewRef = useRef(applyView)
+  applyViewRef.current = applyView
+
   // wheel zoom needs a non-passive native listener (React's is passive)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      applyView(e.clientX, e.clientY, e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015))
+      applyViewRef.current(e.clientX, e.clientY, e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015))
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-    // zoomAt reads only refs + stable setters
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // facies coloring needs either a sea level curve (water-depth facies) or
@@ -201,6 +248,22 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
         >
           erosion
         </button>
+        <div className="seg">
+          {(['fit', '1:1'] as const).map((mode) => (
+            <button
+              key={mode}
+              className={`seg__btn${(mode === '1:1') === equalAxes ? ' is-active' : ''}`}
+              onClick={() => {
+                setEqualAxes(mode === '1:1')
+                setXZoom(null) // re-frame for the new aspect rule
+                setYZoom(null)
+              }}
+              title={mode === '1:1' ? 'equal horizontal/vertical scale' : 'stretch to fill the panel'}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
         {(xZoom || yZoom) && (
           <button className="seg__btn seg__btn--solo" onClick={resetZoom} title="reset zoom (double-click)">
             reset zoom
@@ -324,6 +387,7 @@ function drawSection(
   hover: { index: number; time: number | null } | null,
   xZoom: [number, number] | null,
   yZoom: [number, number] | null,
+  equalAxes: boolean,
   defaultsOut: { current: { x0: number; x1: number; y0: number; y1: number } | null },
 ): Frame {
   const { section: sec, bounds } = state
@@ -341,10 +405,19 @@ function drawSection(
   const [yLo, yHi] = ylim ?? [bounds.lo - pad, bounds.hi + pad]
   defaultsOut.current = { x0: x[0], x1: x[n - 1], y0: yLo, y1: yHi }
   const [vx0, vx1] = xZoom ?? [x[0], x[n - 1]]
-  const [vy0, vy1] = yZoom ?? [yLo, yHi]
+  let [vy0, vy1] = yZoom ?? [yLo, yHi]
   const units = (m.space as { units?: string })?.units ?? m.elevationUnits
   // right gutter for the colorbar — same width as the Wheeler panel below
-  const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, vy0, vy1)
+  let f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, vy0, vy1)
+  if (equalAxes) {
+    // 1:1 scale: the elevation span follows from the distance span and the
+    // pixel aspect; only the vertical center is free
+    const ySpan = ((vx1 - vx0) / f.w) * f.h
+    const yCenter = yZoom ? (yZoom[0] + yZoom[1]) / 2 : (yLo + yHi) / 2
+    vy0 = yCenter - ySpan / 2
+    vy1 = yCenter + ySpan / 2
+    f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, vy0, vy1)
+  }
 
   ctx.save()
   ctx.beginPath()

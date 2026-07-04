@@ -2,11 +2,13 @@
 
 Follows stratigraph/notebooks/Stratigraph_meanderpy_model.ipynb, using the
 example_3 model of the paper (Figs. 6-14). The model writes 3 surfaces per
-5-year migration event (post-erosion, post-point-bar, post-levee), so:
-- topo keeps all 181 surfaces; surface i is at time (i/3) * 5 years
-- each interval has a layer facies: erosion (no deposit), point bar, or levee
-  (derived/layerFacies: -1 / 0 / 1), which is what the paper's block diagrams
-  are colored by
+5-year migration event (post-erosion, post-point-bar, post-levee). Keeping
+the post-erosion surfaces makes every third Wheeler row a stasis stripe at
+active locations, so the bundle keeps only the two DEPOSITIONAL surfaces per
+event (post-point-bar, post-levee) — the erosion is absorbed into the
+point-bar interval, matching the model's own strat/facies structure:
+- 121 surfaces; interval facies alternate point bar / levee
+  (derived/layerFacies: 0 / 1), the paper's block-diagram coloring
 - classification res = 0.05 m; no subsidence, no sea level
 Downsampled 3x spatially (30 m grid) to keep the bundle web-sized.
 """
@@ -46,22 +48,31 @@ def main():
         pb_code = int(np.array(model["point bar"]))
         levee_code = int(np.array(model["levee"]))
         dx = float(np.array(model["dx"])) * DOWNSAMPLE
-    nrows, ncols, nt = topo.shape
-    print(f"  grid: {nrows} x {ncols}, nt={nt}, dx={dx} m")
-    n_events = (nt - 1) // 3
-    assert nt == 3 * n_events + 1, "expected 3 surfaces per event"
+    nrows, ncols, nt_raw = topo.shape
+    n_events = (nt_raw - 1) // 3
+    assert nt_raw == 3 * n_events + 1, "expected 3 surfaces per event"
     assert len(facies) == 2 * n_events, "expected 2 depositional layers per event"
 
-    # surface times: 3 sub-steps per 5-year event
-    time = np.arange(nt) / 3.0 * DT_EVENT
-
-    # per-interval facies: erosion sub-step has no deposit
-    layer_facies = np.full(nt - 1, -1, dtype=np.int8)
+    # keep only the depositional surfaces: post-point-bar and post-levee per
+    # event (drop post-erosion; erosion merges into the point-bar interval)
+    idx = [0]
     for k in range(n_events):
-        f0 = int(facies[2 * k])
-        f1 = int(facies[2 * k + 1])
-        layer_facies[3 * k + 1] = 0 if f0 == pb_code else 1
-        layer_facies[3 * k + 2] = 0 if f1 == pb_code else 1
+        idx.extend([3 * k + 2, 3 * k + 3])
+    topo = topo[:, :, idx]
+    nt = topo.shape[2]
+    print(f"  grid: {nrows} x {ncols}, nt={nt} (from {nt_raw}), dx={dx} m")
+
+    # surface times: point bar mid-event, levee at the end (uniform 2.5 yr)
+    time = np.zeros(nt)
+    for k in range(n_events):
+        time[2 * k + 1] = k * DT_EVENT + DT_EVENT / 2
+        time[2 * k + 2] = (k + 1) * DT_EVENT
+
+    # per-interval facies alternate exactly like the model's strat layers
+    layer_facies = np.array(
+        [0 if int(f) == pb_code else 1 for f in facies], dtype=np.int8
+    )
+    assert len(layer_facies) == nt - 1
 
     bundle = bundle_dir_for(DATASET_ID, wipe=True)
     arrays = {
@@ -88,7 +99,7 @@ def main():
         "path": "derived/layerFacies.bin",
         "dtype": "int8",
         "shape": [int(nt - 1)],
-        "note": "-1 erosion sub-step (no deposit), 0 point bar, 1 levee",
+        "note": "0 point bar (erosion absorbed), 1 levee",
     }
     layer_facies.tofile(bundle / "derived" / "layerFacies.bin")
     for name, arr in zip(
@@ -103,7 +114,7 @@ def main():
         "name": "meanderpy channel-belt model",
         "description": (
             "Meandering-river channel-belt model built with meanderpy: 60 "
-            "migration events (erosion, point bar, levee every 5 years); "
+            "migration events (point bar and levee deposition every 5 years); "
             "30 m grid, elevations in meters."
         ),
         "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 6-14",
@@ -136,6 +147,10 @@ def main():
                 "wheelerVmax": 3,
             },
             "strikeSection": {"defaultLoc": ncols // 2, "wheelerVmin": -3, "wheelerVmax": 3},
+            "section": {"equalAxes": True},
+            # one Wheeler row per 5-yr event (pb + levee summed), as in the
+            # paper's Fig. 12 — avoids thick/thin row striping
+            "wheeler": {"rowStep": 2},
         },
     }
     write_manifest(bundle, manifest)

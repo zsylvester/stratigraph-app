@@ -1,7 +1,7 @@
 {
   "id": "meanderpy",
   "name": "meanderpy channel-belt model",
-  "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (erosion, point bar, levee every 5 years); 30 m grid, elevations in meters.",
+  "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
   "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 6-14",
   "kind": "grid3d",
   "elevationUnits": "m",
@@ -21,7 +21,7 @@
     "units": "m"
   },
   "time": {
-    "n": 181,
+    "n": 121,
     "units": "years",
     "displayUnits": "years",
     "displayFactor": 1.0,
@@ -39,7 +39,7 @@
     "time": {
       "path": "arrays/time.bin",
       "shape": [
-        181
+        121
       ],
       "dtype": "float64"
     },
@@ -48,7 +48,7 @@
       "shape": [
         247,
         325,
-        181
+        121
       ],
       "dtype": "int16",
       "scale": 0.00023330402911107362,
@@ -64,7 +64,7 @@
       "shape": [
         247,
         325,
-        180
+        120
       ],
       "note": "+1 deposition, -1 erosion, 0 stasis; last axis = time intervals"
     },
@@ -72,9 +72,9 @@
       "path": "derived/layerFacies.bin",
       "dtype": "int8",
       "shape": [
-        180
+        120
       ],
-      "note": "-1 erosion sub-step (no deposit), 0 point bar, 1 levee"
+      "note": "0 point bar (erosion absorbed), 1 levee"
     },
     "depositionTime": {
       "path": "derived/depositionTime.bin",
@@ -135,6 +135,12 @@
       "defaultLoc": 162,
       "wheelerVmin": -3,
       "wheelerVmax": 3
+    },
+    "section": {
+      "equalAxes": true
+    },
+    "wheeler": {
+      "rowStep": 2
     }
   }
 }
