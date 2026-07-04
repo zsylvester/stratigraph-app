@@ -4,7 +4,8 @@ Interactive web app for exploring stratigraphic models the way Sylvester, Straub
 Covault (2024, *Earth-Science Reviews* 250, 104706) does: a Barrell (time–elevation)
 plot, dip/strike cross sections, a chronostratigraphic (Wheeler) diagram and a map
 view, all linked through a shared time step. Datasets: Barrell's 1917 elevation
-curve, the Wheeler 1964 diagram reconstruction, and the XES-02 flume experiment.
+curve, the Wheeler 1964 diagram reconstruction, the XES-02 and TDWB-17-1 flume
+experiments, and the meanderpy channel-belt model.
 
 ## Architecture
 

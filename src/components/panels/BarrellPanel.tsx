@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { Dataset } from '../../data/loader'
 import { drawFrame, makeFrame, setupCanvas, themeColors, xPix, yPix } from '../../plot/frame'
 import { classify, retroDeform } from '../../strat/core'
-import { css, FACIES_COLORS, faciesFromDepth, hexToRgb, viridis } from '../../strat/colormaps'
+import {
+  css,
+  FACIES_COLORS,
+  faciesFromDepth,
+  hexToRgb,
+  LAYER_FACIES_COLORS,
+  viridis,
+} from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { sectionLength, useAppStore } from '../../state/store'
 
@@ -14,6 +21,8 @@ interface Curve {
   /** raw (non-retro-deformed) elevation at the probe, for facies coloring */
   rawTopo: Float32Array | null
   seaLevel: Float64Array | null
+  /** per-interval facies labels (e.g. meanderpy point bar / levee) */
+  layerFacies: Int8Array | null
 }
 
 /**
@@ -58,6 +67,7 @@ export function BarrellPanel({ dataset }: { dataset: Dataset }) {
       let e: Float32Array
       let rawTopo: Float32Array | null = null
       let seaLevel: Float64Array | null = null
+      let layerFacies: Int8Array | null = null
       if (isCurve) {
         const el = await dataset.array('elevation')
         e = Float32Array.from(el.data as Float64Array)
@@ -70,13 +80,16 @@ export function BarrellPanel({ dataset }: { dataset: Dataset }) {
         const topoS = retroDeform(sec, sec.nt - 1)
         e = topoS.slice(j * sec.nt, (j + 1) * sec.nt)
         rawTopo = sec.topo.slice(j * sec.nt, (j + 1) * sec.nt)
-        if (m.kind === 'grid3d') {
+        if (m.kind === 'grid3d' && m.arrays.seaLevel) {
           seaLevel = (await dataset.array('seaLevel')).data as Float64Array
+        }
+        if (m.derived?.layerFacies) {
+          layerFacies = (await dataset.array('layerFacies')).data as Int8Array
         }
       }
       const cls = new Int8Array(e.length - 1)
       classify(e, 0, e.length, res, cls, 0)
-      if (!cancelled) setCurve({ times, e, cls, rawTopo, seaLevel })
+      if (!cancelled) setCurve({ times, e, cls, rawTopo, seaLevel, layerFacies })
     })()
     return () => {
       cancelled = true
@@ -153,7 +166,7 @@ function drawBarrell(
   hover: { index: number; time: number | null } | null,
   scan: { img: HTMLImageElement; extent: number[] } | null,
 ) {
-  const { times, e, cls, rawTopo, seaLevel } = curve
+  const { times, e, cls, rawTopo, seaLevel, layerFacies } = curve
   const m = dataset.manifest
   const nt = e.length
   const kk = Math.min(k, nt - 1)
@@ -275,11 +288,17 @@ function drawBarrell(
   // preserved intervals colored by age or by facies at deposition (shared
   // with the cross section); unconformities where preservation is interrupted
   const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
-  const useFacies = colorMode === 'facies' && rawTopo !== null && seaLevel !== null
+  const useLayerFacies = colorMode === 'facies' && layerFacies !== null
+  const useFacies =
+    colorMode === 'facies' && !useLayerFacies && rawTopo !== null && seaLevel !== null
   const intervalColor = (i: number) =>
-    useFacies
-      ? FACIES_COLORS[faciesFromDepth(rawTopo![i] - seaLevel![i], bins)]
-      : css(viridis(i / Math.max(1, nt - 2)))
+    useLayerFacies
+      ? layerFacies![i] >= 0
+        ? LAYER_FACIES_COLORS[layerFacies![i]]
+        : theme.vac
+      : useFacies
+        ? FACIES_COLORS[faciesFromDepth(rawTopo![i] - seaLevel![i], bins)]
+        : css(viridis(i / Math.max(1, nt - 2)))
   let runTopIdx: number | null = null
   for (let i = 0; i < kk; i++) {
     const d = strat[i + 1] - strat[i]

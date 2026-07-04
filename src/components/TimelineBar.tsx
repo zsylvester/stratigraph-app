@@ -113,9 +113,26 @@ async function loadSignal(dataset: Dataset): Promise<[Float64Array, Float32Array
   const times = timeArr.data as Float64Array
 
   let signal: Float32Array
-  if (m.kind === 'grid3d') {
+  if (m.kind === 'grid3d' && m.arrays.seaLevel) {
     const sl = await dataset.array('seaLevel')
     signal = Float32Array.from(sl.data as Float64Array)
+  } else if (m.kind === 'grid3d') {
+    // no sea level (e.g. fluvial models): mean elevation per step, sampled
+    const topo = await dataset.array('topo')
+    const [nRows, nCols, ntt] = topo.shape
+    signal = new Float32Array(ntt)
+    const stride = 4
+    for (let i = 0; i < ntt; i++) {
+      let sum = 0
+      let cnt = 0
+      for (let r = 0; r < nRows; r += stride) {
+        for (let c = 0; c < nCols; c += stride) {
+          sum += topo.data[(r * nCols + c) * ntt + i]
+          cnt++
+        }
+      }
+      signal[i] = sum / cnt
+    }
   } else if (m.kind === 'curve1d') {
     const el = await dataset.array('elevation')
     signal = Float32Array.from(el.data as Float64Array)

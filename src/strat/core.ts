@@ -122,9 +122,11 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
   const [nRows, nCols] = space.shape
   const [dRow, dCol] = space.spacing
   const nt = m.time.n
+  // subsid is optional: experiments scanned in an absolute frame don't have one
+  const hasSubsid = !!m.arrays.subsid
   const [topoV, subsidV, clsV] = await Promise.all([
     dataset.array('topo'),
-    dataset.array('subsid'),
+    hasSubsid ? dataset.array('subsid') : Promise.resolve(null),
     dataset.array('wheelerClass'),
   ])
 
@@ -137,7 +139,7 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
       nt,
       x,
       topo: topoV.pick(r).data as Float32Array,
-      subsid: subsidV.pick(r).data as Float32Array,
+      subsid: subsidV ? (subsidV.pick(r).data as Float32Array) : null,
       cls: clsV.pick(r).data as Int8Array,
     }
   }
@@ -145,12 +147,14 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
   const c = Math.min(nCols - 1, Math.max(0, index))
   const x = Float64Array.from({ length: nRows }, (_, j) => j * dRow)
   const topo = new Float32Array(nRows * nt)
-  const subsid = new Float32Array(nRows * nt)
+  const subsid = subsidV ? new Float32Array(nRows * nt) : null
   const cls = new Int8Array(nRows * (nt - 1))
   for (let r = 0; r < nRows; r++) {
     const src = (r * nCols + c) * nt
     topo.set((topoV.data as Float32Array).subarray(src, src + nt), r * nt)
-    subsid.set((subsidV.data as Float32Array).subarray(src, src + nt), r * nt)
+    if (subsid && subsidV) {
+      subsid.set((subsidV.data as Float32Array).subarray(src, src + nt), r * nt)
+    }
     const srcC = (r * nCols + c) * (nt - 1)
     cls.set((clsV.data as Int8Array).subarray(srcC, srcC + (nt - 1)), r * (nt - 1))
   }

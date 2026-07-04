@@ -90,6 +90,8 @@ function shortName(id: string, name: string): string {
     barrell: 'Barrell 1917',
     wheeler1964: 'Wheeler 1964',
     xes02: 'XES-02',
+    tdwb17: 'TDWB-17-1',
+    meanderpy: 'meanderpy',
   }
   return short[id] ?? name
 }

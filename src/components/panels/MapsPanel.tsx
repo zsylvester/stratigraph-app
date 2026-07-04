@@ -16,8 +16,8 @@ const RECOMPUTE_THROTTLE = 150
 
 interface Volumes {
   topo: NdArray
-  subsid: NdArray
-  seaLevel: Float64Array
+  subsid: NdArray | null
+  seaLevel: Float64Array | null
   /** fixed topo color range over the whole run */
   topoRange: [number, number]
   /** deposit thickness range over the whole run */
@@ -53,10 +53,11 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     let cancelled = false
     setVolumes(null)
     setField(null)
+    const m = dataset.manifest
     void Promise.all([
       dataset.array('topo'),
-      dataset.array('subsid'),
-      dataset.array('seaLevel'),
+      m.arrays.subsid ? dataset.array('subsid') : Promise.resolve(null),
+      m.arrays.seaLevel ? dataset.array('seaLevel') : Promise.resolve(null),
     ]).then(([topo, subsid, sl]) => {
       if (cancelled) return
       const t = topo.data as Float32Array
@@ -74,7 +75,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
       setVolumes({
         topo,
         subsid,
-        seaLevel: sl.data as Float64Array,
+        seaLevel: sl ? (sl.data as Float64Array) : null,
         topoRange: [lo, hi],
         thicknessRange: [0, thMax],
       })
@@ -206,20 +207,20 @@ function topoSlice(topo: NdArray, nRows: number, nCols: number, k: number): Floa
 /** deposit thickness up to step k: strat[k] - strat[0], datum-independent */
 function computeThickness(
   topo: NdArray,
-  subsid: NdArray,
+  subsid: NdArray | null,
   nLoc: number,
   nt: number,
   k: number,
 ): Float32Array {
   const t = topo.data as Float32Array
-  const s = subsid.data as Float32Array
+  const s = subsid ? (subsid.data as Float32Array) : null
   const out = new Float32Array(nLoc)
   for (let j = 0; j < nLoc; j++) {
     const b = j * nt
-    const yk = t[b + k] - s[b + k]
+    const yk = t[b + k] - (s ? s[b + k] : 0)
     let mn = yk
     for (let i = k - 1; i >= 0; i--) {
-      const y = t[b + i] - s[b + i]
+      const y = t[b + i] - (s ? s[b + i] : 0)
       if (y < mn) mn = y
     }
     out[j] = yk - mn
@@ -240,7 +241,7 @@ function drawMap(
   const space = dataset.manifest.space as SpaceGrid3d
   const [nRows, nCols] = space.shape
   const { data, k, mode } = field
-  const sl = volumes.seaLevel[k]
+  const sl = volumes.seaLevel ? volumes.seaLevel[k] : null
   const [vmin, vmax] = mode === 'topography' ? volumes.topoRange : volumes.thicknessRange
   const [pr, pg, pb] = hexToRgb(theme.paper) // subaerial wash target
   const [ir, ig, ib] = hexToRgb(theme.ink) // contour line color
@@ -256,7 +257,7 @@ function drawMap(
         continue
       }
       let [rr, gg, bb] = deepR((v - vmin) / (vmax - vmin || 1))
-      if (mode === 'topography' && v >= sl) {
+      if (mode === 'topography' && sl !== null && v >= sl) {
         // subaerial: wash toward the paper color so land reads as land
         rr = rr + (pr - rr) * 0.55
         gg = gg + (pg - gg) * 0.55
@@ -298,7 +299,7 @@ function drawMap(
   }
 
   // shoreline: contour of topography at the current sea level
-  if (mode === 'topography') {
+  if (mode === 'topography' && sl !== null) {
     ctx.strokeStyle = theme.dep
     ctx.lineWidth = 2
     drawContour(ctx, data, nRows, nCols, sl, toPx)
@@ -359,7 +360,7 @@ function drawMap(
   const units = dataset.manifest.elevationUnits
   const label =
     mode === 'topography'
-      ? `topography at step ${k + 1} · shoreline at ${sl.toFixed(0)} ${units}`
+      ? `topography at step ${k + 1}${sl !== null ? ` · shoreline at ${sl.toFixed(0)} ${units}` : ''}`
       : `deposit thickness up to step ${k + 1} · 0 to ${vmax.toFixed(0)} ${units}`
   ctx.lineWidth = 3
   ctx.strokeStyle = theme.paper

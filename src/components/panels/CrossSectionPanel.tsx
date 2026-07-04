@@ -12,7 +12,13 @@ import {
   yPix,
 } from '../../plot/frame'
 import { retroDeform, stratUpTo } from '../../strat/core'
-import { css, FACIES_COLORS, faciesFromDepth, viridis } from '../../strat/colormaps'
+import {
+  css,
+  FACIES_COLORS,
+  faciesFromDepth,
+  LAYER_FACIES_COLORS,
+  viridis,
+} from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { sectionCount, useAppStore } from '../../state/store'
 
@@ -51,13 +57,21 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     setYZoom(null)
   }, [state])
 
-  // sea level (grid3d only), fetched once
+  // sea level and per-layer facies (both optional), fetched once
   const seaLevelRef = useRef<Float64Array | null>(null)
+  const layerFaciesRef = useRef<Int8Array | null>(null)
   useEffect(() => {
     seaLevelRef.current = null
-    if (dataset.manifest.kind === 'grid3d') {
+    layerFaciesRef.current = null
+    const m = dataset.manifest
+    if (m.kind === 'grid3d' && m.arrays.seaLevel) {
       void dataset.array('seaLevel').then((a) => {
         seaLevelRef.current = a.data as Float64Array
+      })
+    }
+    if (m.derived?.layerFacies) {
+      void dataset.array('layerFacies').then((a) => {
+        layerFaciesRef.current = a.data as Int8Array
       })
     }
   }, [dataset])
@@ -69,8 +83,9 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
       const ctx = setupCanvas(canvas)
       if (!ctx) return
       frameRef.current = drawSection(
-        ctx, canvas, state, timeStep, probeIndex, seaLevelRef.current, dataset,
-        colorMode, showErosion, hover, xZoom, yZoom, defaultsRef,
+        ctx, canvas, state, timeStep, probeIndex, seaLevelRef.current,
+        layerFaciesRef.current, dataset, colorMode, showErosion, hover,
+        xZoom, yZoom, defaultsRef,
       )
     }
     draw()
@@ -157,7 +172,11 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const hasFacies = dataset.manifest.kind === 'grid3d' // needs a sea level curve
+  // facies coloring needs either a sea level curve (water-depth facies) or
+  // per-layer facies shipped in the bundle
+  const hasFacies =
+    dataset.manifest.kind === 'grid3d' &&
+    (!!dataset.manifest.arrays.seaLevel || !!dataset.manifest.derived?.layerFacies)
   return (
     <div className="panel__body">
       <div className="controls-row">
@@ -298,6 +317,7 @@ function drawSection(
   k: number,
   probeIndex: number,
   seaLevel: Float64Array | null,
+  layerFacies: Int8Array | null,
   dataset: Dataset,
   colorMode: ColorMode,
   showErosion: boolean,
@@ -370,11 +390,17 @@ function drawSection(
   }
 
   // layers up to the current time step (stable colors during playback)
+  const faciesMode = colorMode === 'facies' && (layerFacies !== null || seaLevel !== null)
   for (let i = 0; i < kk; i++) {
-    if (colorMode === 'age' || !seaLevel) {
+    if (!faciesMode) {
       fillPolyRun(i, 0, n - 1, css(viridis(i / Math.max(1, nt - 2))))
+    } else if (layerFacies) {
+      // per-layer facies (e.g. meanderpy point bar / levee); erosion sub-steps
+      // leave no deposit, so their color rarely shows — use the vacuity tone
+      const lf = layerFacies[i]
+      fillPolyRun(i, 0, n - 1, lf >= 0 ? LAYER_FACIES_COLORS[lf] : theme.vac)
     } else {
-      // split the layer into runs of constant facies
+      // water-depth facies: split the layer into runs of constant facies
       let j0 = 0
       let fPrev = faciesOf(0, i)
       for (let j = 1; j < n; j++) {
@@ -493,10 +519,21 @@ function drawSection(
 
   // colorbar / legend in the right gutter
   const cbX = f.x0 + f.w + 14
-  if (colorMode === 'age') {
+  if (!faciesMode) {
     drawColorbar(
       ctx, cbX, f.y0, f.h, viridis, 0, nt - 1,
       'deposit age (time step)', { ink: theme.inkSoft, faint: theme.faint },
+    )
+  } else if (layerFacies) {
+    const labels =
+      (m.processing.layerFaciesLabels as string[] | undefined) ?? ['facies 0', 'facies 1']
+    drawSwatchLegend(
+      ctx, cbX, f.y0,
+      [
+        ...labels.map((label, i) => ({ color: LAYER_FACIES_COLORS[i], label })),
+        ...(showErosion ? [{ color: theme.ero, label: 'erosion', line: true }] : []),
+      ],
+      { ink: theme.inkSoft, faint: theme.faint },
     )
   } else {
     drawSwatchLegend(

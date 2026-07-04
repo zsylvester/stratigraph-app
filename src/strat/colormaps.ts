@@ -61,6 +61,12 @@ export function hexToRgb(h: string): RGB {
  */
 export const FACIES_COLORS = ['#fffacd', '#cd853f', '#a0522d'] // lemonchiffon / peru / sienna
 
+/**
+ * Per-layer facies colors (meanderpy: point bar sand / levee mud), matching
+ * the notebook's [[0.9,0.9,0],[0.5,0.25,0]].
+ */
+export const LAYER_FACIES_COLORS = ['#e5e500', '#7f3f00']
+
 /** facies index from water depth (wd = elevation - sea level) and depth bins */
 export function faciesFromDepth(wd: number, bins: number[]): number {
   if (wd >= bins[0]) return 0

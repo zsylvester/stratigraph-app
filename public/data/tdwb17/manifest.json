@@ -1,0 +1,138 @@
+{
+  "id": "tdwb17",
+  "name": "TDWB-17-1 experiment",
+  "description": "Topography scans from the TDWB-17-1 Tulane Delta Basin experiment (Straub lab), 101 scans over 12.5 days with a rising base level; downsampled to a 10 mm grid.",
+  "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 1, 21-24",
+  "kind": "grid3d",
+  "elevationUnits": "mm",
+  "space": {
+    "shape": [
+      266,
+      462
+    ],
+    "spacing": [
+      10.0,
+      10.0
+    ],
+    "axes": [
+      "strike",
+      "dip"
+    ],
+    "units": "mm"
+  },
+  "time": {
+    "n": 101,
+    "units": "days",
+    "displayUnits": "days",
+    "displayFactor": 1.0,
+    "array": "time"
+  },
+  "processing": {
+    "resolution": 0.5,
+    "faciesDepthBins": [
+      0.0,
+      -100.0
+    ]
+  },
+  "arrays": {
+    "time": {
+      "path": "arrays/time.bin",
+      "shape": [
+        101
+      ],
+      "dtype": "float64"
+    },
+    "seaLevel": {
+      "path": "arrays/sea_level.bin",
+      "shape": [
+        101
+      ],
+      "dtype": "float64"
+    },
+    "topo": {
+      "path": "arrays/topo.bin",
+      "shape": [
+        266,
+        462,
+        101
+      ],
+      "dtype": "int16",
+      "scale": 0.008468218750000003,
+      "offset": -1320.9830000000002,
+      "nan": -32768,
+      "maxAbsError": 0.004234109375000001
+    }
+  },
+  "derived": {
+    "wheelerClass": {
+      "path": "derived/wheelerClass.bin",
+      "dtype": "int8",
+      "shape": [
+        266,
+        462,
+        100
+      ],
+      "note": "+1 deposition, -1 erosion, 0 stasis; last axis = time intervals"
+    },
+    "depositionTime": {
+      "path": "derived/depositionTime.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    },
+    "erosionTime": {
+      "path": "derived/erosionTime.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    },
+    "stasisTime": {
+      "path": "derived/stasisTime.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    },
+    "vacuityTime": {
+      "path": "derived/vacuityTime.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    },
+    "depositionThickness": {
+      "path": "derived/depositionThickness.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    },
+    "erosionThickness": {
+      "path": "derived/erosionThickness.bin",
+      "shape": [
+        266,
+        462
+      ],
+      "dtype": "float32"
+    }
+  },
+  "views": {
+    "dipSection": {
+      "defaultLoc": 132,
+      "wheelerVmin": -10,
+      "wheelerVmax": 10
+    },
+    "strikeSection": {
+      "defaultLoc": 231,
+      "wheelerVmin": -10,
+      "wheelerVmax": 10
+    }
+  }
+}

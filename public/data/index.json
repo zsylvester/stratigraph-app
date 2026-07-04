@@ -7,6 +7,18 @@
       "path": "barrell/"
     },
     {
+      "id": "meanderpy",
+      "name": "meanderpy channel-belt model",
+      "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (erosion, point bar, levee every 5 years); 30 m grid, elevations in meters.",
+      "path": "meanderpy/"
+    },
+    {
+      "id": "tdwb17",
+      "name": "TDWB-17-1 experiment",
+      "description": "Topography scans from the TDWB-17-1 Tulane Delta Basin experiment (Straub lab), 101 scans over 12.5 days with a rising base level; downsampled to a 10 mm grid.",
+      "path": "tdwb17/"
+    },
+    {
       "id": "wheeler1964",
       "name": "Wheeler (1964) diagram reconstruction",
       "description": "Topographic surfaces digitized from Harry Wheeler's 1964 baselevel-transit figure, with a reconstructed basement-uplift history; the basis for reconstructing his chronostratigraphic diagram.",
