@@ -458,9 +458,7 @@ body {
 }
 
 .map-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  width: 100%;
+  /* sized by drawMap to the dataset's physical aspect ratio (true 1:1 map) */
   cursor: crosshair;
   /* dragging the section trace must not scroll the page on touch */
   touch-action: none;
@@ -646,6 +644,12 @@ body {
   /* the map's height comes from its aspect ratio — no need for a tall panel */
   .panel--maps {
     flex: 0 0 auto;
+  }
+
+  .panel--maps .map-wrap {
+    /* height from the wrapper's physical aspect ratio (width-driven) */
+    flex: none;
+    width: 100%;
   }
 
   .controls-row {

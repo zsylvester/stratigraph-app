@@ -7,18 +7,6 @@
       "path": "barrell/"
     },
     {
-      "id": "meanderpy",
-      "name": "meanderpy channel-belt model",
-      "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
-      "path": "meanderpy/"
-    },
-    {
-      "id": "tdwb17",
-      "name": "TDWB-17-1 experiment",
-      "description": "Topography scans from the TDWB-17-1 Tulane Delta Basin experiment (Straub lab), 101 scans over 12.5 days with a rising base level; downsampled to a 10 mm grid.",
-      "path": "tdwb17/"
-    },
-    {
       "id": "wheeler1964",
       "name": "Wheeler (1964) diagram reconstruction",
       "description": "Topographic surfaces digitized from Harry Wheeler's 1964 baselevel-transit figure, with a reconstructed basement-uplift history; the basis for reconstructing his chronostratigraphic diagram.",
@@ -27,8 +15,20 @@
     {
       "id": "xes02",
       "name": "XES-02 experiment",
-      "description": "Topography and basement scans from the XES-02 subsiding-basin flume experiment (St. Anthony Falls Laboratory / Tulane), resampled to 1-hour time steps; sea level history included.",
+      "description": "Topography and basement scans from the XES-02 subsiding-basin flume experiment (St. Anthony Falls Laboratory, University of Minnesota), resampled to 1-hour time steps; sea level history included.",
       "path": "xes02/"
+    },
+    {
+      "id": "tdwb17",
+      "name": "TDWB-17-1 experiment",
+      "description": "Topography scans from the TDWB-17-1 Tulane Delta Basin experiment (Straub lab), 101 scans over 12.5 days with a rising base level; downsampled to a 10 mm grid.",
+      "path": "tdwb17/"
+    },
+    {
+      "id": "meanderpy",
+      "name": "meanderpy channel-belt model",
+      "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
+      "path": "meanderpy/"
     }
   ]
 }

@@ -228,8 +228,8 @@ def main():
         "name": "XES-02 experiment",
         "description": (
             "Topography and basement scans from the XES-02 subsiding-basin flume "
-            "experiment (St. Anthony Falls Laboratory / Tulane), resampled to 1-hour "
-            "time steps; sea level history included."
+            "experiment (St. Anthony Falls Laboratory, University of Minnesota), "
+            "resampled to 1-hour time steps; sea level history included."
         ),
         "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 15-20",
         "kind": "grid3d",

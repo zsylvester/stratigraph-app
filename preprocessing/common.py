@@ -76,6 +76,10 @@ def write_manifest(bundle_dir, manifest):
         json.dump(manifest, f, indent=2)
 
 
+# dataset picker order in the app (roughly: historical, then by complexity)
+DATASET_ORDER = ["barrell", "wheeler1964", "xes02", "tdwb17", "meanderpy"]
+
+
 def update_index(dataset_id, name, description):
     """Register the dataset in public/data/index.json (idempotent)."""
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
@@ -88,7 +92,8 @@ def update_index(dataset_id, name, description):
         {"id": dataset_id, "name": name, "description": description,
          "path": f"{dataset_id}/"}
     )
-    index["datasets"].sort(key=lambda d: d["id"])
+    order = {d: i for i, d in enumerate(DATASET_ORDER)}
+    index["datasets"].sort(key=lambda d: (order.get(d["id"], len(order)), d["id"]))
     index_path.write_text(json.dumps(index, indent=2))
 
 

@@ -118,8 +118,10 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     const draw = () =>
       drawMap(canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover)
     draw()
+    // the canvas is sized by drawMap to fit its wrapper at the physical
+    // aspect ratio, so watch the wrapper, not the canvas
     const ro = new ResizeObserver(draw)
-    ro.observe(canvas)
+    ro.observe(canvas.parentElement ?? canvas)
     return () => ro.disconnect()
   }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme])
 
@@ -148,11 +150,10 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
           ))}
         </div>
       </div>
-      <div className="map-wrap">
+      <div className="map-wrap" style={{ aspectRatio: `${nCols * dCol} / ${nRows * dRow}` }}>
         <canvas
           ref={canvasRef}
           className="map-canvas"
-          style={{ aspectRatio: `${nCols * dCol} / ${nRows * dRow}` }}
           onPointerDown={(e) => {
             dragRef.current = true
             try {
@@ -241,6 +242,21 @@ function drawMap(
   const space = dataset.manifest.space as SpaceGrid3d
   const [nRows, nCols] = space.shape
   const { data, k, mode } = field
+
+  // contain-fit the canvas inside its wrapper at the TRUE physical aspect
+  // ratio — CSS max-height clamping would silently stretch the map
+  const wrap = canvas.parentElement
+  if (wrap) {
+    const ratio = (nCols * space.spacing[1]) / (nRows * space.spacing[0])
+    let cw = wrap.clientWidth
+    let chh = cw / ratio
+    if (chh > wrap.clientHeight && wrap.clientHeight > 0) {
+      chh = wrap.clientHeight
+      cw = chh * ratio
+    }
+    canvas.style.width = `${cw}px`
+    canvas.style.height = `${chh}px`
+  }
   const sl = volumes.seaLevel ? volumes.seaLevel[k] : null
   const [vmin, vmax] = mode === 'topography' ? volumes.topoRange : volumes.thicknessRange
   const [pr, pg, pb] = hexToRgb(theme.paper) // subaerial wash target
