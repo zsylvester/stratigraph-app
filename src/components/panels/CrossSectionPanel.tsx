@@ -58,6 +58,10 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
   const defaultsRef = useRef<{ x0: number; x1: number; y0: number; y1: number } | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
   const movedRef = useRef(false)
+  // box zoom: drag a rectangle, release to zoom to it (persistent mode)
+  const [boxMode, setBoxMode] = useState(false)
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const boxOriginRef = useRef<{ x: number; y: number } | null>(null)
 
   // a new section (or dataset) has its own framing
   useEffect(() => {
@@ -94,12 +98,27 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
         layerFaciesRef.current, dataset, colorMode, showErosion, hover,
         xZoom, yZoom, equalAxes, defaultsRef,
       )
+      if (box) {
+        // rubber band for box zoom
+        ctx.save()
+        ctx.strokeStyle = getComputedStyle(canvas).getPropertyValue('--ero').trim() || '#a34a24'
+        ctx.fillStyle = 'rgba(163, 74, 36, 0.08)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 3])
+        const bx = Math.min(box.x0, box.x1)
+        const by = Math.min(box.y0, box.y1)
+        const bw = Math.abs(box.x1 - box.x0)
+        const bh = Math.abs(box.y1 - box.y0)
+        ctx.fillRect(bx, by, bw, bh)
+        ctx.strokeRect(bx + 0.5, by + 0.5, bw, bh)
+        ctx.restore()
+      }
     }
     draw()
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme, xZoom, yZoom, equalAxes])
+  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme, xZoom, yZoom, equalAxes, box])
 
   // In 1:1 mode the full extent of a low-relief section is a hairline, so
   // materialize a visible default window (sized by the relief, centered on
@@ -202,15 +221,59 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     setYZoom(null)
   }
 
-  /** button zoom: in/out anchored at the center of the current view */
-  const zoomBy = (factor: number) => {
-    const canvas = canvasRef.current
+  const canvasLocal = (clientX: number, clientY: number) => {
+    const rect = canvasRef.current!.getBoundingClientRect()
+    return { x: clientX - rect.left, y: clientY - rect.top }
+  }
+
+  useEffect(() => {
+    if (!boxMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setBoxMode(false)
+        setBox(null)
+        boxOriginRef.current = null
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [boxMode])
+
+  const zoomToBox = (a: { x: number; y: number }, b: { x: number; y: number }) => {
     const f = frameRef.current
-    if (!canvas || !f) return
-    const rect = canvas.getBoundingClientRect()
-    const cx = rect.left + f.x0 + f.w / 2
-    const cy = rect.top + f.y0 + f.h / 2
-    applyView(cx, cy, cx, cy, factor)
+    const d = defaultsRef.current
+    if (!f || !d) return
+    const toData = (p: { x: number; y: number }) => ({
+      x: f.xMin + ((p.x - f.x0) / f.w) * (f.xMax - f.xMin),
+      y: f.yMin + (1 - (p.y - f.y0) / f.h) * (f.yMax - f.yMin),
+    })
+    const p1 = toData(a)
+    const p2 = toData(b)
+    const x0 = Math.min(p1.x, p2.x)
+    const x1 = Math.max(p1.x, p2.x)
+    const y0 = Math.min(p1.y, p2.y)
+    const y1 = Math.max(p1.y, p2.y)
+    if (equalAxes) {
+      // 1:1: fit the whole rectangle at equal scale; y center is free
+      let xspan = Math.max(x1 - x0, (y1 - y0) * (f.w / f.h))
+      xspan = Math.min(d.x1 - d.x0, Math.max((d.x1 - d.x0) / 80, xspan))
+      const half = xspan / 2
+      const cx = Math.max(d.x0 + half, Math.min(d.x1 - half, (x0 + x1) / 2))
+      setXZoom([cx - half, cx + half])
+      const yspan = xspan * (f.h / f.w)
+      const cy = (y0 + y1) / 2
+      setYZoom([cy - yspan / 2, cy + yspan / 2])
+    } else {
+      const range = (lo: number, hi: number, dLo: number, dHi: number): [number, number] | null => {
+        const defSpan = dHi - dLo
+        const span = Math.min(defSpan, Math.max(defSpan / 80, hi - lo))
+        if (span >= defSpan * 0.999) return null
+        let nLo = Math.max(dLo, Math.min(dHi - span, lo))
+        return [nLo, nLo + span]
+      }
+      setXZoom(range(x0, x1, d.x0, d.x1))
+      setYZoom(range(y0, y1, d.y0, d.y1))
+    }
   }
 
   // the native wheel listener is registered once; reach the latest applyView
@@ -275,14 +338,17 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
             </button>
           ))}
         </div>
-        <div className="seg">
-          <button className="seg__btn" onClick={() => zoomBy(1 / 0.65)} title="zoom out">
-            −
-          </button>
-          <button className="seg__btn" onClick={() => zoomBy(0.65)} title="zoom in">
-            +
-          </button>
-        </div>
+        <button
+          className={`seg__btn seg__btn--solo${boxMode ? ' is-active' : ''}`}
+          onClick={() => {
+            setBoxMode((v) => !v)
+            setBox(null)
+            boxOriginRef.current = null
+          }}
+          title="drag a rectangle to zoom to it (Esc exits)"
+        >
+          box zoom
+        </button>
         {(xZoom || yZoom) && (
           <button className="seg__btn seg__btn--solo" onClick={resetZoom} title="reset zoom (double-click)">
             reset zoom
@@ -292,7 +358,10 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
       <canvas
         ref={canvasRef}
         className="plot-canvas"
-        style={{ touchAction: 'pan-y' }}
+        style={{
+          touchAction: boxMode ? 'none' : 'pan-y',
+          cursor: boxMode ? 'crosshair' : undefined,
+        }}
         onPointerDown={(e) => {
           try {
             e.currentTarget.setPointerCapture(e.pointerId)
@@ -301,6 +370,11 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
           }
           pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
           movedRef.current = false
+          if (boxMode && pointersRef.current.size === 1) {
+            const p = canvasLocal(e.clientX, e.clientY)
+            boxOriginRef.current = p
+            setBox({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
+          }
         }}
         onPointerMove={(e) => {
           const pts = pointersRef.current
@@ -313,12 +387,20 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
           }
           const oldPts = [...pts.values()]
           pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
-          if (pts.size === 1 && e.buttons) {
+          if (boxMode && boxOriginRef.current && pts.size === 1 && e.buttons) {
+            const o = boxOriginRef.current
+            const p = canvasLocal(e.clientX, e.clientY)
+            if (Math.abs(p.x - o.x) + Math.abs(p.y - o.y) > 2) movedRef.current = true
+            setBox({ x0: o.x, y0: o.y, x1: p.x, y1: p.y })
+          } else if (pts.size === 1 && e.buttons) {
             const dx = e.clientX - prev.x
             const dy = e.clientY - prev.y
             if (Math.abs(dx) + Math.abs(dy) > 2) movedRef.current = true
             if (movedRef.current) applyView(e.clientX, e.clientY, prev.x, prev.y, 1)
           } else if (pts.size === 2 && oldPts.length === 2) {
+            // a second finger cancels any rubber band and pinches instead
+            boxOriginRef.current = null
+            setBox(null)
             // pinch: scale from distance ratio, translate from midpoint motion
             movedRef.current = true
             const newPts = [...pts.values()]
@@ -340,12 +422,26 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
             /* synthetic or already-released pointer */
           }
           pointersRef.current.delete(e.pointerId)
+          if (boxMode && boxOriginRef.current) {
+            const o = boxOriginRef.current
+            const p = canvasLocal(e.clientX, e.clientY)
+            boxOriginRef.current = null
+            setBox(null)
+            if (movedRef.current && Math.abs(p.x - o.x) > 6 && Math.abs(p.y - o.y) > 6) {
+              zoomToBox(o, p)
+              return
+            }
+          }
           if (!movedRef.current && pointersRef.current.size === 0) {
             const i = indexAtPx(e.clientX)
             if (i !== null) setProbeIndex(i)
           }
         }}
-        onPointerCancel={(e) => pointersRef.current.delete(e.pointerId)}
+        onPointerCancel={(e) => {
+          pointersRef.current.delete(e.pointerId)
+          boxOriginRef.current = null
+          setBox(null)
+        }}
         onPointerLeave={() => {
           if (pointersRef.current.size === 0) setHover(null)
         }}
