@@ -39,7 +39,10 @@ export function PanelGrid() {
         const available = view.kinds.includes(kind)
         const View = view.component
         return (
-          <section key={view.key} className={`panel${available ? '' : ' is-unavailable'}`}>
+          <section
+            key={view.key}
+            className={`panel panel--${view.key}${available ? '' : ' is-unavailable'}`}
+          >
             <div className="panel__head">
               <span className="panel__num">{String(i + 1).padStart(2, '0')}</span>
               <h2 className="panel__title">{view.title}</h2>

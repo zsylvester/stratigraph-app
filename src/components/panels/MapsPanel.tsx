@@ -121,7 +121,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     return () => ro.disconnect()
   }, [field, volumes, dataset, sectionAxis, sectionIndex, hover])
 
-  const moveSection = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const moveSection = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -151,11 +151,12 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
           ref={canvasRef}
           className="map-canvas"
           style={{ aspectRatio: `${nCols * dCol} / ${nRows * dRow}` }}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
             dragRef.current = true
+            e.currentTarget.setPointerCapture(e.pointerId)
             moveSection(e)
           }}
-          onMouseMove={(e) => {
+          onPointerMove={(e) => {
             if (dragRef.current) moveSection(e)
             // hover: position ALONG the current section under the pointer
             const canvas = canvasRef.current
@@ -170,10 +171,11 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
               setHover({ index, time: null })
             }
           }}
-          onMouseUp={() => {
+          onPointerUp={(e) => {
             dragRef.current = false
+            e.currentTarget.releasePointerCapture(e.pointerId)
           }}
-          onMouseLeave={() => {
+          onPointerLeave={() => {
             dragRef.current = false
             setHover(null)
           }}

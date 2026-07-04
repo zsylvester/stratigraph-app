@@ -418,6 +418,8 @@ body {
   max-height: 100%;
   width: 100%;
   cursor: crosshair;
+  /* dragging the section trace must not scroll the page on touch */
+  touch-action: none;
 }
 
 /* ------------------------------- timeline ------------------------------- */
@@ -542,6 +544,85 @@ body {
 
 .timeline__slider:focus {
   outline: none;
+}
+
+/* ------------------------------- phones --------------------------------- */
+
+@media (max-width: 900px) {
+  .app {
+    /* dynamic viewport height: stable under mobile browser chrome */
+    height: 100dvh;
+    grid-template-rows: auto auto 1fr var(--timeline-h);
+  }
+
+  .header {
+    gap: 10px;
+  }
+
+  .header__logo {
+    height: 34px;
+  }
+
+  .header__tagline {
+    display: none;
+  }
+
+  .header__mast {
+    padding: 8px 0;
+  }
+
+  .picker {
+    margin-right: 8px;
+  }
+
+  .picker__btn {
+    padding: 6px 8px;
+    font-size: 11.5px;
+  }
+
+  .subhead {
+    padding-left: 18px;
+  }
+
+  .subhead__cite {
+    display: none;
+  }
+
+  /* panels stack into a scrollable column */
+  .grid {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .panel {
+    flex: 0 0 max(320px, 48dvh);
+  }
+
+  /* the map's height comes from its aspect ratio — no need for a tall panel */
+  .panel--maps {
+    flex: 0 0 auto;
+  }
+
+  .controls-row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .timeline__controls {
+    gap: 7px;
+    padding: 0 10px;
+  }
+
+  .timeline__readout {
+    min-width: 0;
+    font-size: 11.5px;
+    margin-left: 2px;
+  }
+
+  .timeline__hint {
+    display: none;
+  }
 }
 
 /* ------------------------------ load/error ------------------------------ */
