@@ -37,6 +37,12 @@ interface AppState {
   /** color theme; canvases subscribe so they redraw when it flips */
   theme: 'light' | 'dark'
 
+  /**
+   * Zoomed distance range along the section, shared by the cross section and
+   * the Wheeler diagram so their x-axes never diverge; null = full extent.
+   */
+  xZoom: [number, number] | null
+
   init: () => Promise<void>
   selectDataset: (id: string) => Promise<void>
   setTimeStep: (t: number) => void
@@ -49,6 +55,7 @@ interface AppState {
   setSectionColorMode: (m: 'age' | 'facies') => void
   setHover: (h: { index: number; time: number | null } | null) => void
   toggleTheme: () => void
+  setXZoom: (z: [number, number] | null) => void
 }
 
 function initialTheme(): 'light' | 'dark' {
@@ -92,6 +99,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sectionColorMode: 'age',
   hover: null,
   theme: initialTheme(),
+  xZoom: null,
 
   init: async () => {
     try {
@@ -130,6 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sectionAxis: 'dip',
         sectionIndex: dipDefault,
         probeIndex: Math.floor(sectionLength(ds, 'dip') / 2),
+        xZoom: null,
       })
     } catch (e) {
       if (get().datasetId === id) set({ loadError: String(e) })
@@ -167,6 +176,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       sectionAxis: axis,
       sectionIndex: clamped,
       probeIndex: Math.min(nLen - 1, get().probeIndex),
+      // a different section has a different distance axis
+      xZoom: axis === get().sectionAxis ? get().xZoom : null,
     })
   },
 
@@ -184,4 +195,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem('stratigraph-theme', theme)
     set({ theme })
   },
+
+  setXZoom: (z) => set({ xZoom: z }),
 }))

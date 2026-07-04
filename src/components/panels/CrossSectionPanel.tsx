@@ -38,6 +38,19 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
   const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const frameRef = useRef<Frame | null>(null)
 
+  // zoom state: x range shared with the Wheeler panel, y range local
+  const xZoom = useAppStore((s) => s.xZoom)
+  const setXZoom = useAppStore((s) => s.setXZoom)
+  const [yZoom, setYZoom] = useState<[number, number] | null>(null)
+  const defaultsRef = useRef<{ x0: number; x1: number; y0: number; y1: number } | null>(null)
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const movedRef = useRef(false)
+
+  // a new section (or dataset) has its own framing
+  useEffect(() => {
+    setYZoom(null)
+  }, [state])
+
   // sea level (grid3d only), fetched once
   const seaLevelRef = useRef<Float64Array | null>(null)
   useEffect(() => {
@@ -57,26 +70,90 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
       if (!ctx) return
       frameRef.current = drawSection(
         ctx, canvas, state, timeStep, probeIndex, seaLevelRef.current, dataset,
-        colorMode, showErosion, hover,
+        colorMode, showErosion, hover, xZoom, yZoom, defaultsRef,
       )
     }
     draw()
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme])
+  }, [state, timeStep, probeIndex, dataset, colorMode, showErosion, hover, uiTheme, xZoom, yZoom])
 
-  // pointer position -> index along the section
-  const indexAt = (e: React.MouseEvent<HTMLCanvasElement>): number | null => {
+  // pointer position -> index along the section (zoom-aware: via data coords)
+  const indexAtPx = (clientX: number): number | null => {
     const f = frameRef.current
     const canvas = canvasRef.current
     if (!f || !canvas || !state) return null
     const rect = canvas.getBoundingClientRect()
-    const px = e.clientX - rect.left
-    const frac = (px - f.x0) / f.w
+    const frac = (clientX - rect.left - f.x0) / f.w
     if (frac < 0 || frac > 1) return null
-    return Math.round(frac * (state.section.n - 1))
+    const { x, n } = state.section
+    const xData = f.xMin + frac * (f.xMax - f.xMin)
+    const step = (x[n - 1] - x[0]) / (n - 1)
+    return Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
   }
+
+  /** zoomed range for one axis, anchored at a fractional position; null = full */
+  const applyZoom = (
+    lo: number, hi: number, dLo: number, dHi: number, anchorFrac: number, factor: number,
+  ): [number, number] | null => {
+    const defSpan = dHi - dLo
+    let span = (hi - lo) * factor
+    span = Math.min(defSpan, Math.max(defSpan / 80, span))
+    if (span >= defSpan * 0.999) return null
+    let nLo = lo + anchorFrac * (hi - lo) - anchorFrac * span
+    nLo = Math.max(dLo, Math.min(dHi - span, nLo))
+    return [nLo, nLo + span]
+  }
+
+  const zoomAt = (clientX: number, clientY: number, factor: number) => {
+    const f = frameRef.current
+    const d = defaultsRef.current
+    const canvas = canvasRef.current
+    if (!f || !d || !canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const fx = Math.min(1, Math.max(0, (clientX - rect.left - f.x0) / f.w))
+    const fy = Math.min(1, Math.max(0, 1 - (clientY - rect.top - f.y0) / f.h))
+    setXZoom(applyZoom(f.xMin, f.xMax, d.x0, d.x1, fx, factor))
+    setYZoom(applyZoom(f.yMin, f.yMax, d.y0, d.y1, fy, factor))
+  }
+
+  const panBy = (dxPx: number, dyPx: number) => {
+    const f = frameRef.current
+    const d = defaultsRef.current
+    if (!f || !d) return
+    const xSpan = f.xMax - f.xMin
+    if (xSpan < d.x1 - d.x0 - 1e-9) {
+      let lo = f.xMin - (dxPx / f.w) * xSpan
+      lo = Math.max(d.x0, Math.min(d.x1 - xSpan, lo))
+      setXZoom([lo, lo + xSpan])
+    }
+    const ySpan = f.yMax - f.yMin
+    if (ySpan < d.y1 - d.y0 - 1e-9) {
+      let lo = f.yMin + (dyPx / f.h) * ySpan // canvas y grows downward
+      lo = Math.max(d.y0, Math.min(d.y1 - ySpan, lo))
+      setYZoom([lo, lo + ySpan])
+    }
+  }
+
+  const resetZoom = () => {
+    setXZoom(null)
+    setYZoom(null)
+  }
+
+  // wheel zoom needs a non-passive native listener (React's is passive)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015))
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+    // zoomAt reads only refs + stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const hasFacies = dataset.manifest.kind === 'grid3d' // needs a sea level curve
   return (
@@ -103,20 +180,73 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
         >
           erosion
         </button>
+        {(xZoom || yZoom) && (
+          <button className="seg__btn seg__btn--solo" onClick={resetZoom} title="reset zoom (double-click)">
+            reset zoom
+          </button>
+        )}
       </div>
       <canvas
         ref={canvasRef}
         className="plot-canvas"
-        onMouseMove={(e) => {
-          const i = indexAt(e)
-          setHover(i === null ? null : { index: i, time: null })
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={(e) => {
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } catch {
+            /* synthetic or already-released pointer */
+          }
+          pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+          movedRef.current = false
         }}
-        onMouseLeave={() => setHover(null)}
-        onClick={(e) => {
-          const i = indexAt(e)
-          if (i !== null) setProbeIndex(i)
+        onPointerMove={(e) => {
+          const pts = pointersRef.current
+          const prev = pts.get(e.pointerId)
+          if (!prev) {
+            // plain hover
+            const i = indexAtPx(e.clientX)
+            setHover(i === null ? null : { index: i, time: null })
+            return
+          }
+          const oldPts = [...pts.values()]
+          pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+          if (pts.size === 1 && e.buttons) {
+            const dx = e.clientX - prev.x
+            const dy = e.clientY - prev.y
+            if (Math.abs(dx) + Math.abs(dy) > 2) movedRef.current = true
+            if (movedRef.current) panBy(dx, dy)
+          } else if (pts.size === 2 && oldPts.length === 2) {
+            // pinch: scale from distance ratio, pan from midpoint motion
+            movedRef.current = true
+            const newPts = [...pts.values()]
+            const dist = (p: { x: number; y: number }[]) => Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)
+            const mid = (p: { x: number; y: number }[]) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 })
+            const oldD = dist(oldPts)
+            const newD = dist(newPts)
+            const m = mid(newPts)
+            if (oldD > 0 && newD > 0) zoomAt(m.x, m.y, oldD / newD)
+            const mo = mid(oldPts)
+            panBy(m.x - mo.x, m.y - mo.y)
+          }
         }}
-        title="click to move the Barrell probe"
+        onPointerUp={(e) => {
+          try {
+            e.currentTarget.releasePointerCapture(e.pointerId)
+          } catch {
+            /* synthetic or already-released pointer */
+          }
+          pointersRef.current.delete(e.pointerId)
+          if (!movedRef.current && pointersRef.current.size === 0) {
+            const i = indexAtPx(e.clientX)
+            if (i !== null) setProbeIndex(i)
+          }
+        }}
+        onPointerCancel={(e) => pointersRef.current.delete(e.pointerId)}
+        onPointerLeave={() => {
+          if (pointersRef.current.size === 0) setHover(null)
+        }}
+        onDoubleClick={resetZoom}
+        title="click: move probe · drag: pan · wheel/pinch: zoom · double-click: reset"
       />
     </div>
   )
@@ -169,6 +299,9 @@ function drawSection(
   colorMode: ColorMode,
   showErosion: boolean,
   hover: { index: number; time: number | null } | null,
+  xZoom: [number, number] | null,
+  yZoom: [number, number] | null,
+  defaultsOut: { current: { x0: number; x1: number; y0: number; y1: number } | null },
 ): Frame {
   const { section: sec, bounds } = state
   const { n, nt, x } = sec
@@ -183,9 +316,12 @@ function drawSection(
   const ylim = (m.views.section as { ylim?: [number, number] } | undefined)?.ylim
   const pad = (bounds.hi - bounds.lo) * 0.05
   const [yLo, yHi] = ylim ?? [bounds.lo - pad, bounds.hi + pad]
+  defaultsOut.current = { x0: x[0], x1: x[n - 1], y0: yLo, y1: yHi }
+  const [vx0, vx1] = xZoom ?? [x[0], x[n - 1]]
+  const [vy0, vy1] = yZoom ?? [yLo, yHi]
   const units = (m.space as { units?: string })?.units ?? m.elevationUnits
   // right gutter for the colorbar — same width as the Wheeler panel below
-  const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, x[0], x[n - 1], yLo, yHi)
+  const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, vy0, vy1)
 
   ctx.save()
   ctx.beginPath()

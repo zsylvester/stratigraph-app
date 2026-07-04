@@ -33,6 +33,7 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const state = useSection(dataset)
   const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
+  const xZoom = useAppStore((s) => s.xZoom) // distance zoom shared with the section
   const timesRef = useRef<Float64Array | null>(null)
   const frameRef = useRef<Frame | null>(null)
 
@@ -50,14 +51,14 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
       const ctx = setupCanvas(canvas)
       if (!ctx) return
       frameRef.current = drawWheeler(
-        ctx, canvas, state, timeStep, probeIndex, timesRef.current, dataset, hover,
+        ctx, canvas, state, timeStep, probeIndex, timesRef.current, dataset, hover, xZoom,
       )
     }
     draw()
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [state, timeStep, probeIndex, dataset, hover, uiTheme])
+  }, [state, timeStep, probeIndex, dataset, hover, uiTheme, xZoom])
 
   /** pointer -> {index along section, time step} using the actual frame */
   const locate = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -69,7 +70,11 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
     const fx = (e.clientX - rect.left - f.x0) / f.w
     const fy = 1 - (e.clientY - rect.top - f.y0) / f.h
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null
-    const index = Math.round(fx * (state.section.n - 1))
+    // zoom-aware: go through data coordinates
+    const { x, n } = state.section
+    const xData = f.xMin + fx * (f.xMax - f.xMin)
+    const step = (x[n - 1] - x[0]) / (n - 1)
+    const index = Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
     // invert the (possibly non-uniform) time axis
     const tf = dataset.manifest.time.displayFactor
     const target = f.yMin + fy * (f.yMax - f.yMin)
@@ -114,6 +119,7 @@ function drawWheeler(
   times: Float64Array | null,
   dataset: Dataset,
   hover: { index: number; time: number | null } | null,
+  xZoom: [number, number] | null,
 ): Frame {
   const { section: sec } = state
   const { n, nt, x } = sec
@@ -132,7 +138,8 @@ function drawWheeler(
   const tf = m.time.displayFactor
   const t0 = times ? times[0] * tf : 0
   const t1 = times ? times[nt - 1] * tf : nt - 1
-  const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, x[0], x[n - 1], t0, t1)
+  const [vx0, vx1] = xZoom ?? [x[0], x[n - 1]]
+  const f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, t0, t1)
 
   // heatmap via offscreen ImageData (n wide, nt-1 tall; row i = interval i)
   const img = new ImageData(n, nt - 1)
@@ -155,7 +162,11 @@ function drawWheeler(
   ctx.rect(f.x0, f.y0, f.w, f.h)
   ctx.clip()
   ctx.imageSmoothingEnabled = false
-  ctx.drawImage(off, f.x0, f.y0, f.w, f.h)
+  // draw only the zoomed x sub-range of the heatmap (source rect in columns)
+  const full = x[n - 1] - x[0]
+  const sx = ((vx0 - x[0]) / full) * n
+  const sw = ((vx1 - vx0) / full) * n
+  ctx.drawImage(off, sx, 0, sw, nt - 1, f.x0, f.y0, f.w, f.h)
 
   // time cursor
   const py = times ? yPix(f, times[kk] * tf) : yPix(f, kk)

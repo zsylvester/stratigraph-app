@@ -154,7 +154,11 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
           style={{ aspectRatio: `${nCols * dCol} / ${nRows * dRow}` }}
           onPointerDown={(e) => {
             dragRef.current = true
-            e.currentTarget.setPointerCapture(e.pointerId)
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId)
+            } catch {
+              /* synthetic or already-released pointer */
+            }
             moveSection(e)
           }}
           onPointerMove={(e) => {
@@ -174,7 +178,11 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
           }}
           onPointerUp={(e) => {
             dragRef.current = false
-            e.currentTarget.releasePointerCapture(e.pointerId)
+            try {
+              e.currentTarget.releasePointerCapture(e.pointerId)
+            } catch {
+              /* synthetic or already-released pointer */
+            }
           }}
           onPointerLeave={() => {
             dragRef.current = false
