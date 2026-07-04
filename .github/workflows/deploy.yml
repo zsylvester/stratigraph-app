@@ -37,10 +37,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       # Pages deployments occasionally fail with a transient
-      # "Deployment failed, try again later" — retry once before giving up
+      # "Deployment failed, try again later"; immediate retries tend to fail
+      # too, so wait before the second attempt
       - id: deployment
         uses: actions/deploy-pages@v4
         continue-on-error: true
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 90
       - id: deployment-retry
         if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
