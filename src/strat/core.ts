@@ -22,6 +22,14 @@ export interface Section {
   /** (n, nt) basement elevation (subsidence/uplift history), or null */
   subsid: Float32Array | null
   /**
+   * Deformation convention. 'snapshot' (default): topo[i] was measured at
+   * time i, so each surface retro-deforms by its own subsidence
+   * (+subsid[k]-subsid[i]). 'final-datum': topo[i] is stored in its FINAL
+   * position (e.g. surfaces digitized from a completed diagram), so the whole
+   * stack shifts uniformly by subsid[k]-subsid[nt-1].
+   */
+  deformation: 'snapshot' | 'final-datum'
+  /**
    * (n, nt-1) deposition/erosion/stasis classification (+1/-1/0).
    * From the float64 Python pipeline where shipped (grid3d); computed with
    * `classify` otherwise. End-time independent.
@@ -48,8 +56,9 @@ export function classify(e: Float32Array | Float64Array, n0: number, nt: number,
 }
 
 /**
- * Retro-deform a section to the datum of time step k:
- * topoS[j,i] = topo[j,i] + (subsid[j,k] - subsid[j,i]).
+ * Retro-deform a section to the datum of time step k. 'snapshot' data:
+ * topoS[j,i] = topo[j,i] + (subsid[j,k] - subsid[j,i]). 'final-datum' data:
+ * the whole stack shifts by subsid[j,k] - subsid[j,nt-1] (zero at k = nt-1).
  * With no subsidence array this is a copy.
  */
 export function retroDeform(sec: Section, k: number, out?: Float32Array): Float32Array {
@@ -62,8 +71,15 @@ export function retroDeform(sec: Section, k: number, out?: Float32Array): Float3
   for (let j = 0; j < n; j++) {
     const base = j * nt
     const sk = subsid[base + k]
-    for (let i = 0; i < nt; i++) {
-      r[base + i] = topo[base + i] + sk - subsid[base + i]
+    if (sec.deformation === 'final-datum') {
+      const shift = sk - subsid[base + nt - 1]
+      for (let i = 0; i < nt; i++) {
+        r[base + i] = topo[base + i] + shift
+      }
+    } else {
+      for (let i = 0; i < nt; i++) {
+        r[base + i] = topo[base + i] + sk - subsid[base + i]
+      }
     }
   }
   return r
@@ -141,6 +157,7 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
       topo: topoV.pick(r).data as Float32Array,
       subsid: subsidV ? (subsidV.pick(r).data as Float32Array) : null,
       cls: clsV.pick(r).data as Int8Array,
+      deformation: 'snapshot',
     }
   }
   // strike: fix a column, gather across rows
@@ -158,7 +175,7 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
     const srcC = (r * nCols + c) * (nt - 1)
     cls.set((clsV.data as Int8Array).subarray(srcC, srcC + (nt - 1)), r * (nt - 1))
   }
-  return { n: nRows, nt, x, topo, subsid, cls }
+  return { n: nRows, nt, x, topo, subsid, cls, deformation: 'snapshot' }
 }
 
 /** Build the (single) section of a section2d dataset; computes classification. */
@@ -185,7 +202,9 @@ export async function section2d(dataset: Dataset): Promise<Section> {
   // the notebook's create_wheeler_diagram_2D(topo1.T, res)
   for (let j = 0; j < nx; j++) classify(topo, j * nt, nt, res, cls, j * (nt - 1))
   const x = Float64Array.from({ length: nx }, (_, j) => space.x0 + j * space.dx)
-  return { n: nx, nt, x, topo, subsid, cls }
+  const deformation =
+    m.processing.deformation === 'final-datum' ? 'final-datum' : 'snapshot'
+  return { n: nx, nt, x, topo, subsid, cls, deformation }
 }
 
 /**

@@ -20,7 +20,8 @@
   },
   "processing": {
     "resolution": 0.1,
-    "note": "Wheeler diagram is computed on topo as stored (no retro-deformation), matching the notebook; cross sections at time step k use topo[i] + subsid[k] - subsid[i]."
+    "note": "Wheeler diagram is computed on topo as stored, matching the notebook; cross sections at time step k shift the whole stack by subsid[k] - subsid[-1] (final-datum deformation).",
+    "deformation": "final-datum"
   },
   "keySurfaceIndices": [
     0,

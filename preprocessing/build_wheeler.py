@@ -131,10 +131,15 @@ def main():
         },
         "processing": {
             "resolution": 0.1,
+            # the digitized surfaces are stored in their FINAL positions, so
+            # displaying time step k shifts the whole stack uniformly by
+            # subsid[k] - subsid[-1] (the notebook's t = topo - subsid[-1] +
+            # subsid[k]), NOT per-surface like scanned experiment data
+            "deformation": "final-datum",
             "note": (
-                "Wheeler diagram is computed on topo as stored (no retro-deformation), "
-                "matching the notebook; cross sections at time step k use "
-                "topo[i] + subsid[k] - subsid[i]."
+                "Wheeler diagram is computed on topo as stored, matching the "
+                "notebook; cross sections at time step k shift the whole stack "
+                "by subsid[k] - subsid[-1] (final-datum deformation)."
             ),
         },
         # time steps corresponding to the 10 originally digitized surfaces
