@@ -212,7 +212,13 @@ body {
 .subhead__right {
   margin-left: auto;
   color: var(--ink-faint);
-  flex: none;
+  /* shrink and wrap rather than starving the description of width */
+  flex: 0 1 auto;
+  max-width: 45%;
+  text-align: right;
+}
+
+.subhead__link {
   white-space: nowrap;
 }
 
