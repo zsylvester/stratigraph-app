@@ -37,6 +37,9 @@ interface AppState {
   /** color theme; canvases subscribe so they redraw when it flips */
   theme: 'light' | 'dark'
 
+  /** panel key currently maximized to fill the grid, or null */
+  expandedPanel: string | null
+
   /**
    * Zoomed distance range along the section, shared by the cross section and
    * the Wheeler diagram so their x-axes never diverge; null = full extent.
@@ -56,6 +59,7 @@ interface AppState {
   setHover: (h: { index: number; time: number | null } | null) => void
   toggleTheme: () => void
   setXZoom: (z: [number, number] | null) => void
+  toggleExpandedPanel: (key: string) => void
 }
 
 function initialTheme(): 'light' | 'dark' {
@@ -99,6 +103,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sectionColorMode: 'age',
   hover: null,
   theme: initialTheme(),
+  expandedPanel: null,
   xZoom: null,
 
   init: async () => {
@@ -197,4 +202,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setXZoom: (z) => set({ xZoom: z }),
+
+  toggleExpandedPanel: (key) =>
+    set({ expandedPanel: get().expandedPanel === key ? null : key }),
 }))

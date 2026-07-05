@@ -284,8 +284,43 @@ body {
   flex-direction: column;
 }
 
-/* technical-drawing corner tick on each panel */
-.panel::after {
+/* maximize / restore a single panel */
+.panel__expand {
+  appearance: none;
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  align-self: center;
+}
+
+.panel__expand:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: var(--paper-2);
+}
+
+.grid.has-expanded {
+  display: flex;
+}
+
+.grid.has-expanded .panel {
+  display: none;
+}
+
+.grid.has-expanded .panel--expanded {
+  display: flex;
+  flex: 1;
+}
+
+/* technical-drawing corner tick (only where no maximize button sits) */
+.panel.is-unavailable::after {
   content: '';
   position: absolute;
   top: 8px;
