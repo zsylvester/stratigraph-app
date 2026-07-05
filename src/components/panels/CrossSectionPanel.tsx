@@ -16,6 +16,7 @@ import {
   css,
   FACIES_COLORS,
   faciesFromDepth,
+  hexToRgb,
   LAYER_FACIES_COLORS,
   viridis,
 } from '../../strat/colormaps'
@@ -635,6 +636,38 @@ function drawSection(
   ctx.strokeStyle = theme.ink
   ctx.lineWidth = 1.4
   ctx.stroke()
+
+  // water: fill between sea level and the submerged topographic surface,
+  // like the notebook section plotters' plot_water option
+  if (seaLevel) {
+    const sl = seaLevel[kk]
+    const [wr, wg, wb] = hexToRgb(theme.dep)
+    ctx.fillStyle = `rgba(${wr}, ${wg}, ${wb}, 0.25)`
+    const topoAt = (j: number) => topoS[j * nt + kk]
+    // waterline crossing between j0 (dry) and j1 (wet)
+    const shoreX = (j0: number, j1: number) =>
+      x[j0] + ((sl - topoAt(j0)) / (topoAt(j1) - topoAt(j0))) * (x[j1] - x[j0])
+    let j = 0
+    while (j < n) {
+      if (topoAt(j) < sl) {
+        let j1 = j
+        while (j1 + 1 < n && topoAt(j1 + 1) < sl) j1++
+        const xa = j > 0 ? shoreX(j - 1, j) : x[0]
+        const xb = j1 < n - 1 ? shoreX(j1 + 1, j1) : x[n - 1]
+        ctx.beginPath()
+        ctx.moveTo(xPix(f, xa), yPix(f, sl))
+        ctx.lineTo(xPix(f, xb), yPix(f, sl))
+        for (let jj = j1; jj >= j; jj--) {
+          ctx.lineTo(xPix(f, x[jj]), yPix(f, topoAt(jj)))
+        }
+        ctx.closePath()
+        ctx.fill()
+        j = j1 + 1
+      } else {
+        j++
+      }
+    }
+  }
 
   // sea level at the current time step
   if (seaLevel) {
