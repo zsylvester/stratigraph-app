@@ -379,6 +379,10 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* wrap onto extra rows when the panel is narrow (tablet/phone portrait)
+     rather than clipping buttons at the panel edge */
+  flex-wrap: wrap;
+  row-gap: 6px;
   padding: 2px 0 8px;
   flex: none;
 }
@@ -432,12 +436,13 @@ body {
 }
 
 .mini-slider {
-  flex: 1;
+  /* compress before wrapping, but never below a usable length */
+  flex: 1 1 90px;
   appearance: none;
   height: 3px;
   background: var(--line-strong);
   outline: none;
-  min-width: 60px;
+  min-width: 64px;
 }
 
 .mini-slider::-webkit-slider-thumb {
@@ -650,11 +655,6 @@ body {
     /* height from the wrapper's physical aspect ratio (width-driven) */
     flex: none;
     width: 100%;
-  }
-
-  .controls-row {
-    flex-wrap: wrap;
-    row-gap: 6px;
   }
 
   .timeline__controls {

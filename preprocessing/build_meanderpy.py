@@ -135,7 +135,7 @@ def main():
         },
         "processing": {
             "resolution": RES,
-            "layerFaciesLabels": ["point bar", "levee"],
+            "layerFaciesLabels": ["sand", "mud"],
             "note": "no sea level / subsidence; facies are per-layer (layerFacies)",
         },
         "arrays": arrays,

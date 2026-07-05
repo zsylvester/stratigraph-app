@@ -30,8 +30,8 @@
   "processing": {
     "resolution": 0.05,
     "layerFaciesLabels": [
-      "point bar",
-      "levee"
+      "sand",
+      "mud"
     ],
     "note": "no sea level / subsidence; facies are per-layer (layerFacies)"
   },
