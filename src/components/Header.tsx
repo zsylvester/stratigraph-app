@@ -43,7 +43,26 @@ export function Header() {
       </header>
       <div className="subhead">
         <span className="subhead__desc">{dataset?.manifest.description ?? '…'}</span>
-        <span className="subhead__cite">{dataset?.manifest.citation ?? ''}</span>
+        <span className="subhead__right">
+          <span className="subhead__cite">{dataset?.manifest.citation ?? ''} · </span>
+          <a
+            className="subhead__link"
+            href="https://zsylvester.github.io/papers/stratigraphy_space_time/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            paper
+          </a>
+          {' · '}
+          <a
+            className="subhead__link"
+            href="https://github.com/zsylvester/stratigraph"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            code
+          </a>
+        </span>
       </div>
     </>
   )

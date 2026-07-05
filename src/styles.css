@@ -209,11 +209,23 @@ body {
   min-width: 0;
 }
 
-.subhead__cite {
+.subhead__right {
   margin-left: auto;
   color: var(--ink-faint);
   flex: none;
   white-space: nowrap;
+}
+
+.subhead__link {
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--line-strong);
+}
+
+.subhead__link:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
 }
 
 /* ------------------------------ panel grid ------------------------------ */
