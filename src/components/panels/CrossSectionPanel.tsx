@@ -662,24 +662,18 @@ function drawSection(
         }
         ctx.closePath()
         ctx.fill()
+        // water surface: solid line spanning only the water body
+        ctx.beginPath()
+        ctx.moveTo(xPix(f, xa), yPix(f, sl))
+        ctx.lineTo(xPix(f, xb), yPix(f, sl))
+        ctx.strokeStyle = theme.dep
+        ctx.lineWidth = 1.2
+        ctx.stroke()
         j = j1 + 1
       } else {
         j++
       }
     }
-  }
-
-  // sea level at the current time step
-  if (seaLevel) {
-    const sl = seaLevel[kk]
-    ctx.beginPath()
-    ctx.moveTo(f.x0, yPix(f, sl))
-    ctx.lineTo(f.x0 + f.w, yPix(f, sl))
-    ctx.strokeStyle = theme.dep
-    ctx.lineWidth = 1
-    ctx.setLineDash([5, 4])
-    ctx.stroke()
-    ctx.setLineDash([])
   }
 
   // erosional surfaces, drawn ON TOP of the layer/surface lines so they stay
