@@ -316,9 +316,12 @@ function drawMap(
     ((col + 0.5) / nCols) * w,
     ((row + 0.5) / nRows) * h,
   ]
+  // datasets can tune contour density via views.map.contourLevels
+  const nLevels =
+    ((dataset.manifest.views.map as { contourLevels?: number } | undefined)?.contourLevels) ?? 28
   ctx.strokeStyle = `rgba(${ir}, ${ig}, ${ib}, 0.45)`
   ctx.lineWidth = 0.7
-  for (const level of contourLevels(vmin, vmax, 28)) {
+  for (const level of contourLevels(vmin, vmax, nLevels)) {
     if (mode === 'thickness' && level <= 0) continue
     drawContour(ctx, data, nRows, nCols, level, toPx)
   }

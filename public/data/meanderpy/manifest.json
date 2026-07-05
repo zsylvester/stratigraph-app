@@ -141,6 +141,9 @@
     },
     "wheeler": {
       "rowStep": 2
+    },
+    "map": {
+      "contourLevels": 12
     }
   }
 }

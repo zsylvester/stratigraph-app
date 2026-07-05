@@ -148,6 +148,8 @@ def main():
             },
             "strikeSection": {"defaultLoc": ncols // 2, "wheelerVmin": -3, "wheelerVmax": 3},
             "section": {"equalAxes": True},
+            # low relief on a wide floodplain: default contour density is too busy
+            "map": {"contourLevels": 12},
             # one Wheeler row per 5-yr event (pb + levee summed), as in the
             # paper's Fig. 12 — avoids thick/thin row striping
             "wheeler": {"rowStep": 2},
