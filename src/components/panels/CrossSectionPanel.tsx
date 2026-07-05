@@ -577,53 +577,80 @@ function drawSection(
     }
     return out
   }
+  // per-vertex unsubsided top/base + subsidence shift, reused across layers
+  const topU = new Float64Array(n)
+  const baseU = new Float64Array(n)
+  const shU = new Float64Array(n)
   const drawSplitLayer = (i: number) => {
     const sl = seaLevel![Math.min(nt - 1, i + 1)]
     const b1 = sl + bins[0] // paleo-shoreline
     const b2 = sl + bins[1] // shallow/deep boundary
 
-    // layer polygon in unsubsided coordinates (top surface, then base reversed)
-    const poly: UV[] = []
     let lo = Infinity
     let hi = -Infinity
     for (let j = 0; j < n; j++) {
       const sh = sec.subsid ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1] : 0
-      const yU = strat[j * nt + i + 1] - sh
-      poly.push({ x: x[j], yU, sh })
-      if (yU < lo) lo = yU
-      if (yU > hi) hi = yU
-    }
-    for (let j = n - 1; j >= 0; j--) {
-      const sh = sec.subsid ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1] : 0
-      const yU = strat[j * nt + i] - sh
-      poly.push({ x: x[j], yU, sh })
-      if (yU < lo) lo = yU
-      if (yU > hi) hi = yU
+      shU[j] = sh
+      const t = strat[j * nt + i + 1] - sh
+      const b = strat[j * nt + i] - sh
+      topU[j] = t
+      baseU[j] = b
+      if (b < lo) lo = b
+      if (t > hi) hi = t
     }
 
-    const fillPoly = (pts: UV[], color: string) => {
-      if (pts.length < 3) return
-      ctx.beginPath()
-      for (let a = 0; a < pts.length; a++) {
-        const px = xPix(f, pts[a].x)
-        const py = yPix(f, pts[a].yU + pts[a].sh) // resubside for display
-        if (a === 0) ctx.moveTo(px, py)
-        else ctx.lineTo(px, py)
+    // Clip CELL BY CELL: each cell's layer piece is a simple quad, so the
+    // half-plane clips can never bridge disjoint pieces (the whole-ring
+    // approach produced spurious connecting bands where layers pinch to
+    // zero thickness). All pieces of a band go into one multi-subpath fill.
+    const quad: UV[] = [
+      { x: 0, yU: 0, sh: 0 },
+      { x: 0, yU: 0, sh: 0 },
+      { x: 0, yU: 0, sh: 0 },
+      { x: 0, yU: 0, sh: 0 },
+    ]
+    const fillBand = (bLo: number, bHi: number, color: string) => {
+      const path = new Path2D()
+      let any = false
+      for (let j = 0; j < n - 1; j++) {
+        // quick reject: cell entirely outside the band
+        if (Math.max(topU[j], topU[j + 1]) < bLo) continue
+        if (Math.min(baseU[j], baseU[j + 1]) > bHi) continue
+        quad[0].x = x[j]
+        quad[0].yU = topU[j]
+        quad[0].sh = shU[j]
+        quad[1].x = x[j + 1]
+        quad[1].yU = topU[j + 1]
+        quad[1].sh = shU[j + 1]
+        quad[2].x = x[j + 1]
+        quad[2].yU = baseU[j + 1]
+        quad[2].sh = shU[j + 1]
+        quad[3].x = x[j]
+        quad[3].yU = baseU[j]
+        quad[3].sh = shU[j]
+        let pts: UV[] = quad
+        if (bHi !== Infinity) pts = clipHalf(pts, true, bHi)
+        if (bLo !== -Infinity && pts.length) pts = clipHalf(pts, false, bLo)
+        if (pts.length < 3) continue
+        path.moveTo(xPix(f, pts[0].x), yPix(f, pts[0].yU + pts[0].sh))
+        for (let a = 1; a < pts.length; a++) {
+          path.lineTo(xPix(f, pts[a].x), yPix(f, pts[a].yU + pts[a].sh))
+        }
+        path.closePath()
+        any = true
       }
-      ctx.closePath()
+      if (!any) return
       ctx.fillStyle = color
-      ctx.fill()
+      ctx.fill(path)
       ctx.strokeStyle = color
       ctx.lineWidth = 0.75
-      ctx.stroke()
+      ctx.stroke(path)
     }
 
     // fluvial above the paleo-shoreline, shallow between, deep below
-    if (hi >= b1) fillPoly(clipHalf(poly, false, b1), FACIES_COLORS[0])
-    if (hi >= b2 && lo <= b1) {
-      fillPoly(clipHalf(clipHalf(poly, true, b1), false, b2), FACIES_COLORS[1])
-    }
-    if (lo <= b2) fillPoly(clipHalf(poly, true, b2), FACIES_COLORS[2])
+    if (hi >= b1) fillBand(b1, Infinity, FACIES_COLORS[0])
+    if (hi >= b2 && lo <= b1) fillBand(b2, b1, FACIES_COLORS[1])
+    if (lo <= b2) fillBand(-Infinity, b2, FACIES_COLORS[2])
   }
 
   const fillPolyRun = (i: number, j0: number, j1: number, color: string) => {
