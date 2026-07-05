@@ -555,87 +555,75 @@ function drawSection(
   const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
 
   // Water-depth facies, matching split_layer_by_bathymetry: each layer is cut
-  // by the coeval sea level and the shallow/deep boundary — horizontal lines
-  // at deposition time, carried into the display frame through the subsidence
-  // correction — giving the smooth boundaries of the original plots.
-  const bUpper = new Float64Array(n)
-  const bLower = new Float64Array(n)
+  // by the coeval sea level and the shallow/deep boundary. In the 'unsubsided'
+  // frame (display elevation minus the subsidence correction) those boundaries
+  // are horizontal lines, so the sub-polygons come from a plain
+  // Sutherland–Hodgman clip against a horizontal band — computed geometrically
+  // and filled directly. (An earlier canvas-clip implementation cost ~900
+  // clip layers per frame and broke down on large maximized canvases.)
+  type UV = { x: number; yU: number; sh: number }
+  const clipHalf = (pts: UV[], below: boolean, yCut: number): UV[] => {
+    const out: UV[] = []
+    const keep = (v: UV) => (below ? v.yU <= yCut : v.yU >= yCut)
+    for (let a = 0; a < pts.length; a++) {
+      const p = pts[a]
+      const q = pts[(a + 1) % pts.length]
+      const kp = keep(p)
+      if (kp) out.push(p)
+      if (kp !== keep(q)) {
+        const t = (yCut - p.yU) / (q.yU - p.yU)
+        out.push({ x: p.x + t * (q.x - p.x), yU: yCut, sh: p.sh + t * (q.sh - p.sh) })
+      }
+    }
+    return out
+  }
   const drawSplitLayer = (i: number) => {
     const sl = seaLevel![Math.min(nt - 1, i + 1)]
-    let b1lo = Infinity
-    let b1hi = -Infinity
-    let b2lo = Infinity
-    let b2hi = -Infinity
-    for (let j = 0; j < n; j++) {
-      const shift = sec.subsid
-        ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1]
-        : 0
-      const b1 = sl + bins[0] + shift
-      const b2 = sl + bins[1] + shift
-      bUpper[j] = b1
-      bLower[j] = b2
-      if (b1 < b1lo) b1lo = b1
-      if (b1 > b1hi) b1hi = b1
-      if (b2 < b2lo) b2lo = b2
-      if (b2 > b2hi) b2hi = b2
-    }
+    const b1 = sl + bins[0] // paleo-shoreline
+    const b2 = sl + bins[1] // shallow/deep boundary
 
-    const path = new Path2D()
+    // layer polygon in unsubsided coordinates (top surface, then base reversed)
+    const poly: UV[] = []
     let lo = Infinity
     let hi = -Infinity
     for (let j = 0; j < n; j++) {
-      const v = strat[j * nt + i + 1]
-      if (j === 0) path.moveTo(xPix(f, x[j]), yPix(f, v))
-      else path.lineTo(xPix(f, x[j]), yPix(f, v))
-      if (v < lo) lo = v
-      if (v > hi) hi = v
+      const sh = sec.subsid ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1] : 0
+      const yU = strat[j * nt + i + 1] - sh
+      poly.push({ x: x[j], yU, sh })
+      if (yU < lo) lo = yU
+      if (yU > hi) hi = yU
     }
     for (let j = n - 1; j >= 0; j--) {
-      const v = strat[j * nt + i]
-      path.lineTo(xPix(f, x[j]), yPix(f, v))
-      if (v < lo) lo = v
-      if (v > hi) hi = v
+      const sh = sec.subsid ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1] : 0
+      const yU = strat[j * nt + i] - sh
+      poly.push({ x: x[j], yU, sh })
+      if (yU < lo) lo = yU
+      if (yU > hi) hi = yU
     }
-    path.closePath()
 
-    const yTopPx = f.y0 - 2
-    const yBotPx = f.y0 + f.h + 2
-    const fillBand = (upper: Float64Array | null, lower: Float64Array | null, color: string) => {
-      ctx.save()
+    const fillPoly = (pts: UV[], color: string) => {
+      if (pts.length < 3) return
       ctx.beginPath()
-      if (upper) {
-        for (let j = 0; j < n; j++) {
-          const px = xPix(f, x[j])
-          const py = yPix(f, upper[j])
-          if (j === 0) ctx.moveTo(px, py)
-          else ctx.lineTo(px, py)
-        }
-      } else {
-        ctx.moveTo(xPix(f, x[0]), yTopPx)
-        ctx.lineTo(xPix(f, x[n - 1]), yTopPx)
-      }
-      if (lower) {
-        for (let j = n - 1; j >= 0; j--) {
-          ctx.lineTo(xPix(f, x[j]), yPix(f, lower[j]))
-        }
-      } else {
-        ctx.lineTo(xPix(f, x[n - 1]), yBotPx)
-        ctx.lineTo(xPix(f, x[0]), yBotPx)
+      for (let a = 0; a < pts.length; a++) {
+        const px = xPix(f, pts[a].x)
+        const py = yPix(f, pts[a].yU + pts[a].sh) // resubside for display
+        if (a === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
       }
       ctx.closePath()
-      ctx.clip()
       ctx.fillStyle = color
-      ctx.fill(path)
+      ctx.fill()
       ctx.strokeStyle = color
       ctx.lineWidth = 0.75
-      ctx.stroke(path)
-      ctx.restore()
+      ctx.stroke()
     }
 
     // fluvial above the paleo-shoreline, shallow between, deep below
-    if (hi >= b1lo) fillBand(null, bUpper, FACIES_COLORS[0])
-    if (hi >= b2lo && lo <= b1hi) fillBand(bUpper, bLower, FACIES_COLORS[1])
-    if (lo <= b2hi) fillBand(bLower, null, FACIES_COLORS[2])
+    if (hi >= b1) fillPoly(clipHalf(poly, false, b1), FACIES_COLORS[0])
+    if (hi >= b2 && lo <= b1) {
+      fillPoly(clipHalf(clipHalf(poly, true, b1), false, b2), FACIES_COLORS[1])
+    }
+    if (lo <= b2) fillPoly(clipHalf(poly, true, b2), FACIES_COLORS[2])
   }
 
   const fillPolyRun = (i: number, j0: number, j1: number, color: string) => {

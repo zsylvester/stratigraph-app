@@ -131,6 +131,9 @@ export function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D
     canvas.height = h * dpr
   }
   const ctx = canvas.getContext('2d')!
+  // full state reset (transform, clip, save stack) so nothing can leak
+  // between frames; older engines fall back to transform + clear only
+  if (typeof ctx.reset === 'function') ctx.reset()
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
   return ctx
