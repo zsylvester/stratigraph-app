@@ -15,7 +15,6 @@ import { retroDeform, stratUpTo } from '../../strat/core'
 import {
   css,
   FACIES_COLORS,
-  faciesFromDepth,
   hexToRgb,
   LAYER_FACIES_COLORS,
   viridis,
@@ -554,9 +553,90 @@ function drawSection(
 
   // depth bins separating facies (water depth at deposition), from the manifest
   const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
-  const faciesOf = (j: number, i: number): number =>
-    // raw (non-retro-deformed) elevation vs sea level at deposition time
-    faciesFromDepth(sec.topo[j * nt + i] - (seaLevel ? seaLevel[i] : 0), bins)
+
+  // Water-depth facies, matching split_layer_by_bathymetry: each layer is cut
+  // by the coeval sea level and the shallow/deep boundary — horizontal lines
+  // at deposition time, carried into the display frame through the subsidence
+  // correction — giving the smooth boundaries of the original plots.
+  const bUpper = new Float64Array(n)
+  const bLower = new Float64Array(n)
+  const drawSplitLayer = (i: number) => {
+    const sl = seaLevel![Math.min(nt - 1, i + 1)]
+    let b1lo = Infinity
+    let b1hi = -Infinity
+    let b2lo = Infinity
+    let b2hi = -Infinity
+    for (let j = 0; j < n; j++) {
+      const shift = sec.subsid
+        ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1]
+        : 0
+      const b1 = sl + bins[0] + shift
+      const b2 = sl + bins[1] + shift
+      bUpper[j] = b1
+      bLower[j] = b2
+      if (b1 < b1lo) b1lo = b1
+      if (b1 > b1hi) b1hi = b1
+      if (b2 < b2lo) b2lo = b2
+      if (b2 > b2hi) b2hi = b2
+    }
+
+    const path = new Path2D()
+    let lo = Infinity
+    let hi = -Infinity
+    for (let j = 0; j < n; j++) {
+      const v = strat[j * nt + i + 1]
+      if (j === 0) path.moveTo(xPix(f, x[j]), yPix(f, v))
+      else path.lineTo(xPix(f, x[j]), yPix(f, v))
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+    for (let j = n - 1; j >= 0; j--) {
+      const v = strat[j * nt + i]
+      path.lineTo(xPix(f, x[j]), yPix(f, v))
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+    path.closePath()
+
+    const yTopPx = f.y0 - 2
+    const yBotPx = f.y0 + f.h + 2
+    const fillBand = (upper: Float64Array | null, lower: Float64Array | null, color: string) => {
+      ctx.save()
+      ctx.beginPath()
+      if (upper) {
+        for (let j = 0; j < n; j++) {
+          const px = xPix(f, x[j])
+          const py = yPix(f, upper[j])
+          if (j === 0) ctx.moveTo(px, py)
+          else ctx.lineTo(px, py)
+        }
+      } else {
+        ctx.moveTo(xPix(f, x[0]), yTopPx)
+        ctx.lineTo(xPix(f, x[n - 1]), yTopPx)
+      }
+      if (lower) {
+        for (let j = n - 1; j >= 0; j--) {
+          ctx.lineTo(xPix(f, x[j]), yPix(f, lower[j]))
+        }
+      } else {
+        ctx.lineTo(xPix(f, x[n - 1]), yBotPx)
+        ctx.lineTo(xPix(f, x[0]), yBotPx)
+      }
+      ctx.closePath()
+      ctx.clip()
+      ctx.fillStyle = color
+      ctx.fill(path)
+      ctx.strokeStyle = color
+      ctx.lineWidth = 0.75
+      ctx.stroke(path)
+      ctx.restore()
+    }
+
+    // fluvial above the paleo-shoreline, shallow between, deep below
+    if (hi >= b1lo) fillBand(null, bUpper, FACIES_COLORS[0])
+    if (hi >= b2lo && lo <= b1hi) fillBand(bUpper, bLower, FACIES_COLORS[1])
+    if (lo <= b2hi) fillBand(bLower, null, FACIES_COLORS[2])
+  }
 
   const fillPolyRun = (i: number, j0: number, j1: number, color: string) => {
     ctx.beginPath()
@@ -589,18 +669,7 @@ function drawSection(
       const lf = layerFacies[i]
       fillPolyRun(i, 0, n - 1, lf >= 0 ? LAYER_FACIES_COLORS[lf] : theme.vac)
     } else {
-      // water-depth facies: split the layer into runs of constant facies
-      let j0 = 0
-      let fPrev = faciesOf(0, i)
-      for (let j = 1; j < n; j++) {
-        const fj = faciesOf(j, i)
-        if (fj !== fPrev) {
-          fillPolyRun(i, j0, j, FACIES_COLORS[fPrev]) // overlap one point for continuity
-          j0 = j
-          fPrev = fj
-        }
-      }
-      fillPolyRun(i, j0, n - 1, FACIES_COLORS[fPrev])
+      drawSplitLayer(i)
     }
   }
 
