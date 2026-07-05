@@ -36,6 +36,8 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const setSection = useAppStore((s) => s.setSection)
   const hover = useAppStore((s) => s.hover)
   const setHover = useAppStore((s) => s.setHover)
+  const xZoom = useAppStore((s) => s.xZoom) // cross-section zoom window
+  const probeIndex = useAppStore((s) => s.probeIndex) // Barrell column location
   const [mode, setMode] = useState<MapMode>('topography')
   const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const [volumes, setVolumes] = useState<Volumes | null>(null)
@@ -116,14 +118,14 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     const canvas = canvasRef.current
     if (!canvas || !field || !volumes) return
     const draw = () =>
-      drawMap(canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover)
+      drawMap(canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover, xZoom, probeIndex)
     draw()
     // the canvas is sized by drawMap to fit its wrapper at the physical
     // aspect ratio, so watch the wrapper, not the canvas
     const ro = new ResizeObserver(draw)
     ro.observe(canvas.parentElement ?? canvas)
     return () => ro.disconnect()
-  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme])
+  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme, xZoom, probeIndex])
 
   const moveSection = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -150,7 +152,12 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
           ))}
         </div>
       </div>
-      <div className="map-wrap" style={{ aspectRatio: `${nCols * dCol} / ${nRows * dRow}` }}>
+      <div
+        className="map-wrap"
+        // consumed by the mobile stylesheet only; on desktop the wrapper is
+        // flex-bounded and the canvas is contain-fitted inside it
+        style={{ '--map-aspect': `${nCols * dCol} / ${nRows * dRow}` } as React.CSSProperties}
+      >
         <canvas
           ref={canvasRef}
           className="map-canvas"
@@ -237,6 +244,8 @@ function drawMap(
   sectionAxis: 'dip' | 'strike',
   sectionIndex: number,
   hover: { index: number; time: number | null } | null,
+  xZoom: [number, number] | null,
+  probeIndex: number,
 ) {
   const theme = themeColors(canvas)
   const space = dataset.manifest.space as SpaceGrid3d
@@ -321,20 +330,55 @@ function drawMap(
     drawContour(ctx, data, nRows, nCols, sl, toPx)
   }
 
-  // section trace
+  // section trace; the cross-section's current zoom window is the thick part
+  const [dRow, dCol] = space.spacing
+  // along-section distance -> map px (grid samples sit at cell centers)
+  const alongPx = (dist: number) =>
+    sectionAxis === 'dip'
+      ? ((dist / dCol + 0.5) / nCols) * w
+      : ((dist / dRow + 0.5) / nRows) * h
+  const tracePx =
+    sectionAxis === 'dip' ? ((sectionIndex + 0.5) / nRows) * h : ((sectionIndex + 0.5) / nCols) * w
+
   ctx.strokeStyle = theme.ero
-  ctx.lineWidth = 2
+  ctx.lineWidth = xZoom ? 1 : 2
   ctx.beginPath()
   if (sectionAxis === 'dip') {
-    const y = ((sectionIndex + 0.5) / nRows) * h
-    ctx.moveTo(0, y)
-    ctx.lineTo(w, y)
+    ctx.moveTo(0, tracePx)
+    ctx.lineTo(w, tracePx)
   } else {
-    const x = ((sectionIndex + 0.5) / nCols) * w
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, h)
+    ctx.moveTo(tracePx, 0)
+    ctx.lineTo(tracePx, h)
   }
   ctx.stroke()
+  if (xZoom) {
+    const a = alongPx(xZoom[0])
+    const b = alongPx(xZoom[1])
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    if (sectionAxis === 'dip') {
+      ctx.moveTo(a, tracePx)
+      ctx.lineTo(b, tracePx)
+    } else {
+      ctx.moveTo(tracePx, a)
+      ctx.lineTo(tracePx, b)
+    }
+    ctx.stroke()
+  }
+
+  // Barrell column (probe) location: filled dot on the trace
+  {
+    const p = alongPx(probeIndex * (sectionAxis === 'dip' ? dCol : dRow))
+    const px = sectionAxis === 'dip' ? p : tracePx
+    const py = sectionAxis === 'dip' ? tracePx : p
+    ctx.beginPath()
+    ctx.arc(px, py, 4.5, 0, Math.PI * 2)
+    ctx.fillStyle = theme.ero
+    ctx.fill()
+    ctx.strokeStyle = theme.paper
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  }
 
   // linked hover ghost: dot on the section trace at the hovered position
   if (hover) {

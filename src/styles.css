@@ -655,6 +655,7 @@ body {
     /* height from the wrapper's physical aspect ratio (width-driven) */
     flex: none;
     width: 100%;
+    aspect-ratio: var(--map-aspect);
   }
 
   .timeline__controls {
