@@ -153,6 +153,9 @@ def main():
             # one Wheeler row per 5-yr event (pb + levee summed), as in the
             # paper's Fig. 12 — avoids thick/thin row striping
             "wheeler": {"rowStep": 2},
+            # the generic VE ceiling (relief-proportional) overshoots here:
+            # total relief is dominated by thin incised channels
+            "block3d": {"veMax": 60},
         },
     }
     write_manifest(bundle, manifest)

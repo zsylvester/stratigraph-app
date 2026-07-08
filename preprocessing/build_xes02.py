@@ -268,6 +268,7 @@ def main():
                 "depositionTime": {"vmin": 0, "vmax": 1},
                 "erosionTime": {"vmin": 0, "vmax": 0.5},
             },
+            "block3d": {"veMax": 3},
         },
     }
     write_manifest(bundle, manifest)

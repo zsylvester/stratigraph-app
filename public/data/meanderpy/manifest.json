@@ -1,149 +1,152 @@
 {
-  "id": "meanderpy",
-  "name": "meanderpy channel-belt model",
-  "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
-  "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 6-14",
-  "kind": "grid3d",
-  "elevationUnits": "m",
-  "space": {
-    "shape": [
-      247,
-      325
-    ],
-    "spacing": [
-      30.0,
-      30.0
-    ],
-    "axes": [
-      "strike",
-      "dip"
-    ],
-    "units": "m"
-  },
+ "id": "meanderpy",
+ "name": "meanderpy channel-belt model",
+ "description": "Meandering-river channel-belt model built with meanderpy: 60 migration events (point bar and levee deposition every 5 years); 30 m grid, elevations in meters.",
+ "citation": "Sylvester, Straub & Covault (2024), Earth-Science Reviews 250, 104706, Figs. 6-14",
+ "kind": "grid3d",
+ "elevationUnits": "m",
+ "space": {
+  "shape": [
+   247,
+   325
+  ],
+  "spacing": [
+   30.0,
+   30.0
+  ],
+  "axes": [
+   "strike",
+   "dip"
+  ],
+  "units": "m"
+ },
+ "time": {
+  "n": 121,
+  "units": "years",
+  "displayUnits": "years",
+  "displayFactor": 1.0,
+  "array": "time"
+ },
+ "processing": {
+  "resolution": 0.05,
+  "layerFaciesLabels": [
+   "sand",
+   "mud"
+  ],
+  "note": "no sea level / subsidence; facies are per-layer (layerFacies)"
+ },
+ "arrays": {
   "time": {
-    "n": 121,
-    "units": "years",
-    "displayUnits": "years",
-    "displayFactor": 1.0,
-    "array": "time"
+   "path": "arrays/time.bin",
+   "shape": [
+    121
+   ],
+   "dtype": "float64"
   },
-  "processing": {
-    "resolution": 0.05,
-    "layerFaciesLabels": [
-      "sand",
-      "mud"
-    ],
-    "note": "no sea level / subsidence; facies are per-layer (layerFacies)"
-  },
-  "arrays": {
-    "time": {
-      "path": "arrays/time.bin",
-      "shape": [
-        121
-      ],
-      "dtype": "float64"
-    },
-    "topo": {
-      "path": "arrays/topo.bin",
-      "shape": [
-        247,
-        325,
-        121
-      ],
-      "dtype": "int16",
-      "scale": 0.00023330402911107362,
-      "offset": -4.5097780593489425,
-      "nan": -32768,
-      "maxAbsError": 0.00011665201455553681
-    }
-  },
-  "derived": {
-    "wheelerClass": {
-      "path": "derived/wheelerClass.bin",
-      "dtype": "int8",
-      "shape": [
-        247,
-        325,
-        120
-      ],
-      "note": "+1 deposition, -1 erosion, 0 stasis; last axis = time intervals"
-    },
-    "layerFacies": {
-      "path": "derived/layerFacies.bin",
-      "dtype": "int8",
-      "shape": [
-        120
-      ],
-      "note": "0 point bar (erosion absorbed), 1 levee"
-    },
-    "depositionTime": {
-      "path": "derived/depositionTime.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    },
-    "erosionTime": {
-      "path": "derived/erosionTime.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    },
-    "stasisTime": {
-      "path": "derived/stasisTime.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    },
-    "vacuityTime": {
-      "path": "derived/vacuityTime.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    },
-    "depositionThickness": {
-      "path": "derived/depositionThickness.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    },
-    "erosionThickness": {
-      "path": "derived/erosionThickness.bin",
-      "shape": [
-        247,
-        325
-      ],
-      "dtype": "float32"
-    }
-  },
-  "views": {
-    "dipSection": {
-      "defaultLoc": 163,
-      "wheelerVmin": -3,
-      "wheelerVmax": 3
-    },
-    "strikeSection": {
-      "defaultLoc": 162,
-      "wheelerVmin": -3,
-      "wheelerVmax": 3
-    },
-    "section": {
-      "equalAxes": true
-    },
-    "wheeler": {
-      "rowStep": 2
-    },
-    "map": {
-      "contourLevels": 12
-    }
+  "topo": {
+   "path": "arrays/topo.bin",
+   "shape": [
+    247,
+    325,
+    121
+   ],
+   "dtype": "int16",
+   "scale": 0.00023330402911107362,
+   "offset": -4.5097780593489425,
+   "nan": -32768,
+   "maxAbsError": 0.00011665201455553681
   }
+ },
+ "derived": {
+  "wheelerClass": {
+   "path": "derived/wheelerClass.bin",
+   "dtype": "int8",
+   "shape": [
+    247,
+    325,
+    120
+   ],
+   "note": "+1 deposition, -1 erosion, 0 stasis; last axis = time intervals"
+  },
+  "layerFacies": {
+   "path": "derived/layerFacies.bin",
+   "dtype": "int8",
+   "shape": [
+    120
+   ],
+   "note": "0 point bar (erosion absorbed), 1 levee"
+  },
+  "depositionTime": {
+   "path": "derived/depositionTime.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  },
+  "erosionTime": {
+   "path": "derived/erosionTime.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  },
+  "stasisTime": {
+   "path": "derived/stasisTime.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  },
+  "vacuityTime": {
+   "path": "derived/vacuityTime.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  },
+  "depositionThickness": {
+   "path": "derived/depositionThickness.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  },
+  "erosionThickness": {
+   "path": "derived/erosionThickness.bin",
+   "shape": [
+    247,
+    325
+   ],
+   "dtype": "float32"
+  }
+ },
+ "views": {
+  "dipSection": {
+   "defaultLoc": 163,
+   "wheelerVmin": -3,
+   "wheelerVmax": 3
+  },
+  "strikeSection": {
+   "defaultLoc": 162,
+   "wheelerVmin": -3,
+   "wheelerVmax": 3
+  },
+  "section": {
+   "equalAxes": true
+  },
+  "wheeler": {
+   "rowStep": 2
+  },
+  "map": {
+   "contourLevels": 12
+  },
+  "block3d": {
+   "veMax": 60
+  }
+ }
 }

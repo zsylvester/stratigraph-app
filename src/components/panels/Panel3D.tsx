@@ -180,8 +180,15 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       const LZ = (clean.r1 - clean.r0) * dRow
       const relief = hi - lo
       const ve0 = Math.min(500, Math.max(1, Math.round(((0.25 * Math.max(LX, LZ)) / relief) * 10) / 10))
-      setVe(ve0)
-      setVeMax(Math.max(10, Math.ceil(ve0 * 2.5)))
+      // Slider ceiling: the manifest can pin it per dataset
+      // (views.block3d.veMax) — the generic PROPORTIONAL rule (2x the
+      // default puts the relief at ~half the long extent) misjudges models
+      // whose total relief is unrepresentative, like meanderpy's thin
+      // incised channels on a flat floodplain.
+      const veCap = (m.views.block3d as { veMax?: number } | undefined)?.veMax
+      const veMax0 = veCap ?? Math.max(2, Math.ceil(ve0 * 2))
+      setVe(Math.min(ve0, veMax0))
+      setVeMax(veMax0)
       setReady(true)
     })()
 
