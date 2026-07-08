@@ -91,6 +91,8 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
   const [gap, setGap] = useState(0.1)
   // erosional-surface overlay on the wall sections (red), like the 2D panel
   const [showErosion, setShowErosion] = useState(false)
+  // cut modes: show the block on the other side of the cut plane
+  const [cutFlip, setCutFlip] = useState(false)
 
   // cut position: the shared section index when the axes match, else center
   const space = dataset.manifest.space as SpaceGrid3d
@@ -247,11 +249,19 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
           }
         }
       } else if (mode === 'dip cut') {
-        const cut = Math.min(R1, Math.max(R0 + 1, cutPos))
-        blockRanges = [{ r0: R0, r1: cut, c0: C0, c1: C1, ox: 0, oz: 0 }]
+        const cut = Math.min(R1 - 1, Math.max(R0 + 1, cutPos))
+        blockRanges = [
+          cutFlip
+            ? { r0: cut, r1: R1, c0: C0, c1: C1, ox: 0, oz: 0 }
+            : { r0: R0, r1: cut, c0: C0, c1: C1, ox: 0, oz: 0 },
+        ]
       } else if (mode === 'strike cut') {
-        const cut = Math.min(C1, Math.max(C0 + 1, cutPos))
-        blockRanges = [{ r0: R0, r1: R1, c0: C0, c1: cut, ox: 0, oz: 0 }]
+        const cut = Math.min(C1 - 1, Math.max(C0 + 1, cutPos))
+        blockRanges = [
+          cutFlip
+            ? { r0: R0, r1: R1, c0: cut, c1: C1, ox: 0, oz: 0 }
+            : { r0: R0, r1: R1, c0: C0, c1: cut, ox: 0, oz: 0 },
+        ]
       } else {
         blockRanges = [{ r0: R0, r1: R1, c0: C0, c1: C1, ox: 0, oz: 0 }]
       }
@@ -333,7 +343,7 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
     // cut position / gap size following a slider: debounce the rebuild
     const t = window.setTimeout(build, 120)
     return () => window.clearTimeout(t)
-  }, [ready, mode, cutPos, gap, dataset])
+  }, [ready, mode, cutPos, cutFlip, gap, dataset])
 
   // ------------------------- data/theme updates --------------------------
   useEffect(() => {
@@ -446,6 +456,13 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
               }
               aria-label="cut position"
             />
+            <button
+              className={`seg__btn seg__btn--solo${cutFlip ? ' is-active' : ''}`}
+              onClick={() => setCutFlip((v) => !v)}
+              title="show the block on the other side of the cut plane"
+            >
+              other side
+            </button>
           </>
         )}
         {(mode === '2×2' || mode === '3×3') && (
