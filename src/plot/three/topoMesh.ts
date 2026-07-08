@@ -14,7 +14,7 @@
 import * as THREE from 'three'
 
 import type { NdArray } from '../../data/ndarray'
-import { deepR, FACIES_COLORS, faciesFromDepth, hexToRgb } from '../../strat/colormaps'
+import { deepR, hexToRgb } from '../../strat/colormaps'
 
 export interface TopoDims {
   nRows: number
@@ -34,12 +34,14 @@ export interface TopoWindow {
   oz: number
 }
 
+/**
+ * The surface always colors by elevation/bathymetry (like the map view) —
+ * facies is a property of the DEPOSITS on the walls, not of the live
+ * topography, so the facies toggle only affects the wall sections.
+ */
 export interface TopoColorOpts {
-  colorMode: 'age' | 'facies'
-  /** sea level at the current step (subaerial wash / facies), or null */
+  /** sea level at the current step (subaerial wash), or null */
   seaLevel: number | null
-  /** water-depth facies bins */
-  bins: number[]
   /** theme paper color (subaerial wash target) */
   paper: string
   /** fixed elevation color range over the whole run (stable playback colors) */
@@ -208,8 +210,6 @@ export function buildTopoMesh(
     const span = vmax - vmin || 1
     const sl = opts.seaLevel
     const [pr, pg, pb] = hexToRgb(opts.paper)
-    const facies = opts.colorMode === 'facies' && sl !== null
-    const fcols = FACIES_COLORS.map(hexToRgb)
 
     for (let r = 0; r < nr; r++) {
       for (let c = 0; c < nc; c++) {
@@ -224,8 +224,6 @@ export function buildTopoMesh(
           rr = pr
           gg = pg
           bb = pb
-        } else if (facies) {
-          ;[rr, gg, bb] = fcols[faciesFromDepth(y - sl!, opts.bins)]
         } else {
           ;[rr, gg, bb] = deepR((y - vmin) / span)
           if (sl !== null && y >= sl) {

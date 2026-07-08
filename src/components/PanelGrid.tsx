@@ -16,15 +16,15 @@ interface ViewDef {
 }
 
 /**
- * Layout: Barrell | Cross section
- *         Maps    | Wheeler diagram
+ * Layout: Maps/3D | Cross section
+ *         Barrell | Wheeler diagram
  * Cross section sits directly above the Wheeler diagram — they share the
  * distance axis and identical plot margins, so their edges align.
  */
 const VIEWS: ViewDef[] = [
-  { key: 'barrell', title: 'Barrell plot', kinds: ['curve1d', 'section2d', 'grid3d'], component: BarrellPanel },
-  { key: 'section', title: 'Cross section', kinds: ['section2d', 'grid3d'], component: CrossSectionPanel },
   { key: 'maps', title: 'Map view', kinds: ['grid3d'], component: MapsPanel },
+  { key: 'section', title: 'Cross section', kinds: ['section2d', 'grid3d'], component: CrossSectionPanel },
+  { key: 'barrell', title: 'Barrell plot', kinds: ['curve1d', 'section2d', 'grid3d'], component: BarrellPanel },
   { key: 'wheeler', title: 'Chronostratigraphic diagram', kinds: ['section2d', 'grid3d'], component: WheelerPanel },
 ]
 

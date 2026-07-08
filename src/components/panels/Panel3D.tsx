@@ -87,6 +87,8 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
   const [mode, setMode] = useState<ViewMode>('block')
   const [ve, setVe] = useState(1)
   const [veMax, setVeMax] = useState(20)
+  // gap between exploded sub-blocks, as a fraction of the block extent
+  const [gap, setGap] = useState(0.1)
 
   // cut position: the shared section index when the axes match, else center
   const space = dataset.manifest.space as SpaceGrid3d
@@ -217,8 +219,8 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       const C0 = clean.c0
       const C1 = clean.c1
       const nb = mode === '2×2' ? 2 : mode === '3×3' ? 3 : 1
-      const gapX = 0.1 * (C1 - C0) * dCol
-      const gapZ = 0.1 * (R1 - R0) * dRow
+      const gapX = gap * (C1 - C0) * dCol
+      const gapZ = gap * (R1 - R0) * dRow
       const splits = (lo0: number, hi0: number, n: number): [number, number][] => {
         const out: [number, number][] = []
         const len = hi0 - lo0 + 1
@@ -326,10 +328,10 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       build()
       return
     }
-    // cut position following the section slider: debounce the rebuild
+    // cut position / gap size following a slider: debounce the rebuild
     const t = window.setTimeout(build, 120)
     return () => window.clearTimeout(t)
-  }, [ready, mode, cutPos, dataset])
+  }, [ready, mode, cutPos, gap, dataset])
 
   // ------------------------- data/theme updates --------------------------
   useEffect(() => {
@@ -344,9 +346,7 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
       b.sceneCtl.setBackground(theme.paper)
       const topoOpts = {
-        colorMode,
         seaLevel: b.seaLevel ? b.seaLevel[k] : null,
-        bins,
         paper: theme.paper,
         range: b.clean.range,
       }
@@ -436,6 +436,22 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
                 setSection(mode === 'dip cut' ? 'dip' : 'strike', Number(e.target.value))
               }
               aria-label="cut position"
+            />
+          </>
+        )}
+        {(mode === '2×2' || mode === '3×3') && (
+          <>
+            <span className="controls-row__label">gap</span>
+            <input
+              type="range"
+              className="mini-slider"
+              style={{ flex: '0 1 110px' }}
+              min={0}
+              max={0.4}
+              step={0.02}
+              value={gap}
+              onChange={(e) => setGap(Number(e.target.value))}
+              aria-label="gap between blocks"
             />
           </>
         )}
