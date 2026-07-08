@@ -12,6 +12,7 @@ import type { Section } from '../strat/core'
 import { retroDeform, stratUpTo } from '../strat/core'
 import {
   css,
+  EROSION_ON_FACIES,
   FACIES_COLORS,
   hexToRgb,
   LAYER_FACIES_COLORS,
@@ -364,8 +365,9 @@ export function paintSectionBody(
   // the original time-i topography lay above it (vacuity)
   if (opts.showErosion) {
     const thresh = opts.erosionRes
-    ctx.strokeStyle = theme.ero
-    ctx.lineWidth = 1.8
+    // the theme rust vanishes against the sienna 'deep' facies fill
+    ctx.strokeStyle = faciesMode ? EROSION_ON_FACIES : theme.ero
+    ctx.lineWidth = 1.8 * lineScale
     ctx.beginPath()
     for (let i = 1; i <= kk; i++) {
       let pen = false

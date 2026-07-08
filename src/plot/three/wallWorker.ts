@@ -40,6 +40,10 @@ export interface PaintMsg {
   colorMode: 'age' | 'facies'
   bins: number[]
   keySurfaceIndices?: number[]
+  /** draw the erosional-surface overlay (red truncation surfaces) */
+  showErosion: boolean
+  /** vertical resolution threshold for the erosion overlay */
+  erosionRes: number
   theme: SectionTheme
 }
 
@@ -113,8 +117,8 @@ self.onmessage = (e: MessageEvent<InitMsg | PaintMsg>) => {
         colorMode: msg.colorMode,
         bins: msg.bins,
         keySurfaceIndices: msg.keySurfaceIndices,
-        showErosion: false,
-        erosionRes: 0,
+        showErosion: msg.showErosion,
+        erosionRes: msg.erosionRes,
         drawWater: true,
         skipMask: w.skip ?? undefined,
         // the GPU minifies these textures on screen — hairline surfaces

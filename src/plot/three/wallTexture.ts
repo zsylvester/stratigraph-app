@@ -40,6 +40,10 @@ export interface WallPaintOpts {
   colorMode: 'age' | 'facies'
   bins: number[]
   keySurfaceIndices?: number[]
+  /** draw the erosional-surface overlay (red truncation surfaces) */
+  showErosion: boolean
+  /** vertical resolution threshold for the erosion overlay */
+  erosionRes: number
   theme: SectionTheme
 }
 
@@ -183,6 +187,8 @@ export function buildWalls(
         colorMode: o.colorMode,
         bins: o.bins,
         keySurfaceIndices: o.keySurfaceIndices,
+        showErosion: o.showErosion,
+        erosionRes: o.erosionRes,
         theme: o.theme,
       }
       workers[p].postMessage(msg)

@@ -62,6 +62,12 @@ export function hexToRgb(h: string): RGB {
 export const FACIES_COLORS = ['#fffacd', '#cd853f', '#a0522d'] // lemonchiffon / peru / sienna
 
 /**
+ * Erosional-surface overlay on facies-colored fills: the theme rust
+ * (#a34a24) disappears against the sienna 'deep' facies, so use a darker red.
+ */
+export const EROSION_ON_FACIES = '#7f1d0a'
+
+/**
  * Per-layer facies colors (meanderpy: point bar sand / levee mud), matching
  * the notebook's [[0.9,0.9,0],[0.5,0.25,0]].
  */

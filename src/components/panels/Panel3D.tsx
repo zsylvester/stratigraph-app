@@ -89,6 +89,8 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
   const [veMax, setVeMax] = useState(20)
   // gap between exploded sub-blocks, as a fraction of the block extent
   const [gap, setGap] = useState(0.1)
+  // erosional-surface overlay on the wall sections (red), like the 2D panel
+  const [showErosion, setShowErosion] = useState(false)
 
   // cut position: the shared section index when the axes match, else center
   const space = dataset.manifest.space as SpaceGrid3d
@@ -351,7 +353,14 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
         range: b.clean.range,
       }
       for (const t of blocks.topos) t.update(k, topoOpts)
-      const wallOpts = { colorMode, bins, keySurfaceIndices: m.keySurfaceIndices, theme }
+      const wallOpts = {
+        colorMode,
+        bins,
+        keySurfaceIndices: m.keySurfaceIndices,
+        showErosion,
+        erosionRes: m.processing.resolution,
+        theme,
+      }
       if (full) {
         blocks.walls.update(k, wallOpts)
       } else {
@@ -373,7 +382,7 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
     return () => {
       stale = true
     }
-  }, [ready, blocksVersion, timeStep, colorMode, uiTheme, playing, dataset])
+  }, [ready, blocksVersion, timeStep, colorMode, showErosion, uiTheme, playing, dataset])
 
   // vertical exaggeration: a group scale — no geometry or texture rebuilds
   const veRef = useRef(ve)
@@ -468,6 +477,13 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
             ))}
           </div>
         )}
+        <button
+          className={`seg__btn seg__btn--solo${showErosion ? ' is-active' : ''}`}
+          onClick={() => setShowErosion((v) => !v)}
+          title="show erosional surfaces (red) on the wall sections"
+        >
+          erosion
+        </button>
         <span className="controls-row__label">v.e.</span>
         <input
           type="range"

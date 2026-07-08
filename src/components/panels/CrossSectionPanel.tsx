@@ -11,7 +11,7 @@ import {
   xPix,
 } from '../../plot/frame'
 import { paintSectionBody } from '../../plot/sectionPaint'
-import { FACIES_COLORS, LAYER_FACIES_COLORS, viridis } from '../../strat/colormaps'
+import { EROSION_ON_FACIES, FACIES_COLORS, LAYER_FACIES_COLORS, viridis } from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { sectionCount, useAppStore } from '../../state/store'
 
@@ -588,7 +588,7 @@ function drawSection(
       ctx, cbX, f.y0,
       [
         ...labels.map((label, i) => ({ color: LAYER_FACIES_COLORS[i], label })),
-        ...(showErosion ? [{ color: theme.ero, label: 'erosion', line: true }] : []),
+        ...(showErosion ? [{ color: EROSION_ON_FACIES, label: 'erosion', line: true }] : []),
       ],
       { ink: theme.inkSoft, faint: theme.faint },
     )
@@ -599,7 +599,7 @@ function drawSection(
         { color: FACIES_COLORS[0], label: 'topset' },
         { color: FACIES_COLORS[1], label: 'foreset' },
         { color: FACIES_COLORS[2], label: 'deep' },
-        ...(showErosion ? [{ color: theme.ero, label: 'erosion', line: true }] : []),
+        ...(showErosion ? [{ color: EROSION_ON_FACIES, label: 'erosion', line: true }] : []),
       ],
       { ink: theme.inkSoft, faint: theme.faint },
     )
