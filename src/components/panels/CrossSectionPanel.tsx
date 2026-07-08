@@ -9,16 +9,9 @@ import {
   setupCanvas,
   themeColors,
   xPix,
-  yPix,
 } from '../../plot/frame'
-import { retroDeform, stratUpTo } from '../../strat/core'
-import {
-  css,
-  FACIES_COLORS,
-  hexToRgb,
-  LAYER_FACIES_COLORS,
-  viridis,
-} from '../../strat/colormaps'
+import { paintSectionBody } from '../../plot/sectionPaint'
+import { FACIES_COLORS, LAYER_FACIES_COLORS, viridis } from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { sectionCount, useAppStore } from '../../state/store'
 
@@ -511,9 +504,6 @@ function drawSection(
   const theme = themeColors(canvas)
   const m = dataset.manifest
 
-  const topoS = retroDeform(sec, kk)
-  const strat = stratUpTo(topoS, n, nt, kk)
-
   // manifest ylim (paper framing) wins; otherwise preserved-strat bounds
   const ylim = (m.views.section as { ylim?: [number, number] } | undefined)?.ylim
   const pad = (bounds.hi - bounds.lo) * 0.05
@@ -534,256 +524,23 @@ function drawSection(
     f = makeFrame(canvas.clientWidth - CBAR_GUTTER, canvas.clientHeight, vx0, vx1, vy0, vy1)
   }
 
+  const faciesMode = colorMode === 'facies' && (layerFacies !== null || seaLevel !== null)
+  paintSectionBody(ctx, f, sec, kk, theme, {
+    seaLevel,
+    layerFacies,
+    colorMode,
+    bins: (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100],
+    keySurfaceIndices: m.keySurfaceIndices,
+    showErosion,
+    erosionRes: m.processing.resolution,
+    drawWater: true,
+  })
+
+  // interactive markers, clipped to the plot area like the geology
   ctx.save()
   ctx.beginPath()
   ctx.rect(f.x0, f.y0, f.w, f.h)
   ctx.clip()
-
-  // basement: below the oldest preserved surface
-  ctx.beginPath()
-  ctx.moveTo(xPix(f, x[0]), f.y0 + f.h)
-  for (let j = 0; j < n; j++) ctx.lineTo(xPix(f, x[j]), yPix(f, strat[j * nt]))
-  ctx.lineTo(xPix(f, x[n - 1]), f.y0 + f.h)
-  ctx.closePath()
-  ctx.fillStyle = theme.paper3
-  ctx.fill()
-  ctx.strokeStyle = theme.inkSoft
-  ctx.lineWidth = 1
-  ctx.stroke()
-
-  // depth bins separating facies (water depth at deposition), from the manifest
-  const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
-
-  // Water-depth facies, matching split_layer_by_bathymetry: each layer is cut
-  // by the coeval sea level and the shallow/deep boundary. In the 'unsubsided'
-  // frame (display elevation minus the subsidence correction) those boundaries
-  // are horizontal lines, so the sub-polygons come from a plain
-  // Sutherland–Hodgman clip against a horizontal band — computed geometrically
-  // and filled directly. (An earlier canvas-clip implementation cost ~900
-  // clip layers per frame and broke down on large maximized canvases.)
-  type UV = { x: number; yU: number; sh: number }
-  const clipHalf = (pts: UV[], below: boolean, yCut: number): UV[] => {
-    const out: UV[] = []
-    const keep = (v: UV) => (below ? v.yU <= yCut : v.yU >= yCut)
-    for (let a = 0; a < pts.length; a++) {
-      const p = pts[a]
-      const q = pts[(a + 1) % pts.length]
-      const kp = keep(p)
-      if (kp) out.push(p)
-      if (kp !== keep(q)) {
-        const t = (yCut - p.yU) / (q.yU - p.yU)
-        out.push({ x: p.x + t * (q.x - p.x), yU: yCut, sh: p.sh + t * (q.sh - p.sh) })
-      }
-    }
-    return out
-  }
-  // per-vertex unsubsided top/base + subsidence shift, reused across layers
-  const topU = new Float64Array(n)
-  const baseU = new Float64Array(n)
-  const shU = new Float64Array(n)
-  const drawSplitLayer = (i: number) => {
-    const sl = seaLevel![Math.min(nt - 1, i + 1)]
-    const b1 = sl + bins[0] // paleo-shoreline
-    const b2 = sl + bins[1] // shallow/deep boundary
-
-    let lo = Infinity
-    let hi = -Infinity
-    for (let j = 0; j < n; j++) {
-      const sh = sec.subsid ? sec.subsid[j * nt + kk] - sec.subsid[j * nt + i + 1] : 0
-      shU[j] = sh
-      const t = strat[j * nt + i + 1] - sh
-      const b = strat[j * nt + i] - sh
-      topU[j] = t
-      baseU[j] = b
-      if (b < lo) lo = b
-      if (t > hi) hi = t
-    }
-
-    // Clip CELL BY CELL: each cell's layer piece is a simple quad, so the
-    // half-plane clips can never bridge disjoint pieces (the whole-ring
-    // approach produced spurious connecting bands where layers pinch to
-    // zero thickness). All pieces of a band go into one multi-subpath fill.
-    const quad: UV[] = [
-      { x: 0, yU: 0, sh: 0 },
-      { x: 0, yU: 0, sh: 0 },
-      { x: 0, yU: 0, sh: 0 },
-      { x: 0, yU: 0, sh: 0 },
-    ]
-    const fillBand = (bLo: number, bHi: number, color: string) => {
-      const path = new Path2D()
-      let any = false
-      for (let j = 0; j < n - 1; j++) {
-        // quick reject: cell entirely outside the band
-        if (Math.max(topU[j], topU[j + 1]) < bLo) continue
-        if (Math.min(baseU[j], baseU[j + 1]) > bHi) continue
-        quad[0].x = x[j]
-        quad[0].yU = topU[j]
-        quad[0].sh = shU[j]
-        quad[1].x = x[j + 1]
-        quad[1].yU = topU[j + 1]
-        quad[1].sh = shU[j + 1]
-        quad[2].x = x[j + 1]
-        quad[2].yU = baseU[j + 1]
-        quad[2].sh = shU[j + 1]
-        quad[3].x = x[j]
-        quad[3].yU = baseU[j]
-        quad[3].sh = shU[j]
-        let pts: UV[] = quad
-        if (bHi !== Infinity) pts = clipHalf(pts, true, bHi)
-        if (bLo !== -Infinity && pts.length) pts = clipHalf(pts, false, bLo)
-        if (pts.length < 3) continue
-        path.moveTo(xPix(f, pts[0].x), yPix(f, pts[0].yU + pts[0].sh))
-        for (let a = 1; a < pts.length; a++) {
-          path.lineTo(xPix(f, pts[a].x), yPix(f, pts[a].yU + pts[a].sh))
-        }
-        path.closePath()
-        any = true
-      }
-      if (!any) return
-      ctx.fillStyle = color
-      ctx.fill(path)
-      ctx.strokeStyle = color
-      ctx.lineWidth = 0.75
-      ctx.stroke(path)
-    }
-
-    // fluvial above the paleo-shoreline, shallow between, deep below
-    if (hi >= b1) fillBand(b1, Infinity, FACIES_COLORS[0])
-    if (hi >= b2 && lo <= b1) fillBand(b2, b1, FACIES_COLORS[1])
-    if (lo <= b2) fillBand(-Infinity, b2, FACIES_COLORS[2])
-  }
-
-  const fillPolyRun = (i: number, j0: number, j1: number, color: string) => {
-    ctx.beginPath()
-    for (let j = j0; j <= j1; j++) {
-      const px = xPix(f, x[j])
-      const py = yPix(f, strat[j * nt + i])
-      if (j === j0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-    }
-    for (let j = j1; j >= j0; j--) {
-      ctx.lineTo(xPix(f, x[j]), yPix(f, strat[j * nt + i + 1]))
-    }
-    ctx.closePath()
-    ctx.fillStyle = color
-    ctx.fill()
-    // stroke with the fill color to close antialiasing seams between layers
-    ctx.strokeStyle = color
-    ctx.lineWidth = 0.75
-    ctx.stroke()
-  }
-
-  // layers up to the current time step (stable colors during playback)
-  const faciesMode = colorMode === 'facies' && (layerFacies !== null || seaLevel !== null)
-  for (let i = 0; i < kk; i++) {
-    if (!faciesMode) {
-      fillPolyRun(i, 0, n - 1, css(viridis(i / Math.max(1, nt - 2))))
-    } else if (layerFacies) {
-      // per-layer facies (e.g. meanderpy point bar / levee); erosion sub-steps
-      // leave no deposit, so their color rarely shows — use the vacuity tone
-      const lf = layerFacies[i]
-      fillPolyRun(i, 0, n - 1, lf >= 0 ? LAYER_FACIES_COLORS[lf] : theme.vac)
-    } else {
-      drawSplitLayer(i)
-    }
-  }
-
-  // thin black stratigraphic surface lines (condensed zones read darker);
-  // the manifest's key surfaces (originally digitized) are drawn heavier
-  const keys = new Set<number>(m.keySurfaceIndices ?? [])
-  const lineFreq = Math.max(1, Math.ceil(nt / 80))
-  ctx.strokeStyle = theme.ink
-  for (let i = 0; i <= kk; i++) {
-    const isKey = keys.has(i)
-    if (!isKey && i % lineFreq !== 0) continue
-    ctx.lineWidth = isKey ? 0.7 : 0.35
-    ctx.globalAlpha = isKey ? 1 : 0.55
-    ctx.beginPath()
-    for (let j = 0; j < n; j++) {
-      const px = xPix(f, x[j])
-      const py = yPix(f, strat[j * nt + i])
-      if (j === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-    }
-    ctx.stroke()
-  }
-  ctx.globalAlpha = 1
-
-  // current topographic surface
-  ctx.beginPath()
-  for (let j = 0; j < n; j++) {
-    const px = xPix(f, x[j])
-    const py = yPix(f, topoS[j * nt + kk])
-    if (j === 0) ctx.moveTo(px, py)
-    else ctx.lineTo(px, py)
-  }
-  ctx.strokeStyle = theme.ink
-  ctx.lineWidth = 1.4
-  ctx.stroke()
-
-  // water: fill between sea level and the submerged topographic surface,
-  // like the notebook section plotters' plot_water option
-  if (seaLevel) {
-    const sl = seaLevel[kk]
-    const [wr, wg, wb] = hexToRgb(theme.dep)
-    ctx.fillStyle = `rgba(${wr}, ${wg}, ${wb}, 0.25)`
-    const topoAt = (j: number) => topoS[j * nt + kk]
-    // waterline crossing between j0 (dry) and j1 (wet)
-    const shoreX = (j0: number, j1: number) =>
-      x[j0] + ((sl - topoAt(j0)) / (topoAt(j1) - topoAt(j0))) * (x[j1] - x[j0])
-    let j = 0
-    while (j < n) {
-      if (topoAt(j) < sl) {
-        let j1 = j
-        while (j1 + 1 < n && topoAt(j1 + 1) < sl) j1++
-        const xa = j > 0 ? shoreX(j - 1, j) : x[0]
-        const xb = j1 < n - 1 ? shoreX(j1 + 1, j1) : x[n - 1]
-        ctx.beginPath()
-        ctx.moveTo(xPix(f, xa), yPix(f, sl))
-        ctx.lineTo(xPix(f, xb), yPix(f, sl))
-        for (let jj = j1; jj >= j; jj--) {
-          ctx.lineTo(xPix(f, x[jj]), yPix(f, topoAt(jj)))
-        }
-        ctx.closePath()
-        ctx.fill()
-        // water surface: solid line spanning only the water body
-        ctx.beginPath()
-        ctx.moveTo(xPix(f, xa), yPix(f, sl))
-        ctx.lineTo(xPix(f, xb), yPix(f, sl))
-        ctx.strokeStyle = theme.dep
-        ctx.lineWidth = 1.2
-        ctx.stroke()
-        j = j1 + 1
-      } else {
-        j++
-      }
-    }
-  }
-
-  // erosional surfaces, drawn ON TOP of the layer/surface lines so they stay
-  // visible: the preserved horizon of time i is a truncation surface wherever
-  // the original time-i topography lay above it (vacuity)
-  if (showErosion) {
-    const thresh = m.processing.resolution
-    ctx.strokeStyle = theme.ero
-    ctx.lineWidth = 1.8
-    ctx.beginPath()
-    for (let i = 1; i <= kk; i++) {
-      let pen = false
-      for (let j = 0; j < n; j++) {
-        if (topoS[j * nt + i] - strat[j * nt + i] > thresh) {
-          const px = xPix(f, x[j])
-          const py = yPix(f, strat[j * nt + i])
-          if (pen) ctx.lineTo(px, py)
-          else ctx.moveTo(px, py)
-          pen = true
-        } else {
-          pen = false
-        }
-      }
-    }
-    ctx.stroke()
-  }
 
   // probe location marker (where the Barrell plot samples)
   const pj = Math.min(n - 1, probeIndex)

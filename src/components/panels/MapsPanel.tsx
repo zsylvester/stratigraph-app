@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import type { Dataset } from '../../data/loader'
 import type { NdArray } from '../../data/ndarray'
@@ -8,6 +8,11 @@ import { boxBlur3, contourLevels, drawContour } from '../../plot/contours'
 import { themeColors } from '../../plot/frame'
 import { deepR, hexToRgb } from '../../strat/colormaps'
 import { useAppStore } from '../../state/store'
+
+// three.js only downloads when someone opens the 3D tab
+const Panel3D = lazy(() =>
+  import('./Panel3D').then((m) => ({ default: m.Panel3D })),
+)
 
 type MapMode = 'topography' | 'thickness'
 
@@ -39,6 +44,8 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const xZoom = useAppStore((s) => s.xZoom) // cross-section zoom window
   const probeIndex = useAppStore((s) => s.probeIndex) // Barrell column location
   const [mode, setMode] = useState<MapMode>('topography')
+  // plan-view map or the 3D block diagram, sharing this panel's grid cell
+  const [view, setView] = useState<'map' | '3d'>('map')
   const uiTheme = useAppStore((s) => s.theme) // redraw when the theme flips
   const [volumes, setVolumes] = useState<Volumes | null>(null)
   const [field, setField] = useState<{ data: Float32Array; k: number; mode: MapMode } | null>(null)
@@ -91,7 +98,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const pendingRef = useRef<number | null>(null)
   const lastRunRef = useRef(0)
   useEffect(() => {
-    if (!volumes) return
+    if (!volumes || view === '3d') return
     const kk = Math.min(timeStep, nt - 1)
     const run = () => {
       lastRunRef.current = performance.now()
@@ -112,7 +119,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     return () => {
       if (pendingRef.current !== null) window.clearTimeout(pendingRef.current)
     }
-  }, [volumes, timeStep, mode, nRows, nCols, nLoc, nt])
+  }, [volumes, timeStep, mode, view, nRows, nCols, nLoc, nt])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -137,9 +144,38 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     else setSection('strike', Math.round(relX * (nCols - 1)))
   }
 
+  const viewSeg = (
+    <div className="seg">
+      {(['map', '3d'] as const).map((v) => (
+        <button
+          key={v}
+          className={`seg__btn${v === view ? ' is-active' : ''}`}
+          onClick={() => setView(v)}
+        >
+          {v === '3d' ? '3D' : 'map'}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (view === '3d') {
+    return (
+      <Suspense
+        fallback={
+          <div className="panel__body">
+            <div className="controls-row">{viewSeg}</div>
+          </div>
+        }
+      >
+        <Panel3D dataset={dataset} leading={viewSeg} />
+      </Suspense>
+    )
+  }
+
   return (
     <div className="panel__body">
       <div className="controls-row">
+        {viewSeg}
         <div className="seg">
           {(['topography', 'thickness'] as const).map((mm) => (
             <button

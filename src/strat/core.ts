@@ -8,6 +8,7 @@
  */
 
 import type { Dataset } from '../data/loader'
+import type { NdArray } from '../data/ndarray'
 import type { SpaceGrid3d, SpaceSection2d } from '../data/types'
 
 export interface Section {
@@ -176,6 +177,120 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
     cls.set((clsV.data as Int8Array).subarray(srcC, srcC + (nt - 1)), r * (nt - 1))
   }
   return { n: nRows, nt, x, topo, subsid, cls, deformation: 'snapshot' }
+}
+
+/**
+ * Slice a dip/strike section from already-loaded grid3d volumes, restricted
+ * to [lo, hi] (inclusive) along the section, with x in ABSOLUTE grid
+ * coordinates so callers can place it in world space. Used by the 3D block
+ * diagram (sub-block walls, cut faces). Classification is not computed —
+ * the section painter doesn't use it.
+ *
+ * If a spike mask is given (see plot/three/gridClean.ts), flagged points are
+ * linearly interpolated from their nearest clean neighbors along the section
+ * (the whole elevation history), so wall top edges and bounds stay sane.
+ *
+ * When a basement (subsid) volume exists, topo is clamped to it: a sediment
+ * surface below the basement is physically impossible, but the XES-02 scans
+ * contain such holes (up to ~240 mm deep in the distal basin) and the
+ * running-minimum stratigraphy preserves them forever.
+ */
+export function gridSectionSlice(
+  topoV: NdArray,
+  subsidV: NdArray | null,
+  space: SpaceGrid3d,
+  nt: number,
+  axis: SectionAxis,
+  index: number,
+  lo: number,
+  hi: number,
+  bad?: Uint8Array,
+): Section {
+  const [nRows, nCols] = space.shape
+  const [dRow, dCol] = space.spacing
+  const n = hi - lo + 1
+  const tSrc = topoV.data as Float32Array
+  const sSrc = subsidV ? (subsidV.data as Float32Array) : null
+
+  const cellOf = (j: number) =>
+    axis === 'dip' ? index * nCols + (lo + j) : (lo + j) * nCols + index
+
+  let topo: Float32Array
+  let subsid: Float32Array | null = null
+  if (axis === 'dip') {
+    const r = Math.min(nRows - 1, Math.max(0, index))
+    topo = tSrc.subarray((r * nCols + lo) * nt, (r * nCols + hi + 1) * nt)
+    if (sSrc) subsid = sSrc.subarray((r * nCols + lo) * nt, (r * nCols + hi + 1) * nt)
+  } else {
+    const c = Math.min(nCols - 1, Math.max(0, index))
+    topo = new Float32Array(n * nt)
+    if (sSrc) subsid = new Float32Array(n * nt)
+    for (let j = 0; j < n; j++) {
+      const src = ((lo + j) * nCols + c) * nt
+      topo.set(tSrc.subarray(src, src + nt), j * nt)
+      if (subsid && sSrc) subsid.set(sSrc.subarray(src, src + nt), j * nt)
+    }
+  }
+
+  if (bad) {
+    let any = false
+    for (let j = 0; j < n; j++) {
+      if (bad[cellOf(j)]) {
+        any = true
+        break
+      }
+    }
+    if (any) {
+      if (axis === 'dip') topo = new Float32Array(topo) // don't mutate the cached volume
+      // interpolate each maximal bad run from its clean endpoints
+      let j = 0
+      while (j < n) {
+        if (!bad[cellOf(j)]) {
+          j++
+          continue
+        }
+        let j1 = j
+        while (j1 + 1 < n && bad[cellOf(j1 + 1)]) j1++
+        const a = j - 1 // clean left neighbor (or -1)
+        const b = j1 + 1 // clean right neighbor (or n)
+        for (let i = 0; i < nt; i++) {
+          const va = a >= 0 ? topo[a * nt + i] : NaN
+          const vb = b < n ? topo[b * nt + i] : NaN
+          for (let jj = j; jj <= j1; jj++) {
+            let v: number
+            if (a >= 0 && b < n) {
+              const t = (jj - a) / (b - a)
+              v = va + t * (vb - va)
+            } else {
+              v = a >= 0 ? va : vb
+            }
+            if (Number.isFinite(v)) topo[jj * nt + i] = v
+          }
+        }
+        j = j1 + 1
+      }
+    }
+  }
+
+  if (subsid) {
+    let violates = false
+    for (let i = 0; i < n * nt; i++) {
+      if (topo[i] < subsid[i]) {
+        violates = true
+        break
+      }
+    }
+    if (violates) {
+      if (axis === 'dip') topo = new Float32Array(topo) // may be a cache view
+      for (let i = 0; i < n * nt; i++) {
+        if (topo[i] < subsid[i]) topo[i] = subsid[i]
+      }
+    }
+  }
+
+  const step = axis === 'dip' ? dCol : dRow
+  const x = Float64Array.from({ length: n }, (_, j) => (lo + j) * step)
+  return { n, nt, x, topo, subsid, cls: new Int8Array(0), deformation: 'snapshot' }
 }
 
 /** Build the (single) section of a section2d dataset; computes classification. */

@@ -522,6 +522,20 @@ body {
   touch-action: none;
 }
 
+/* 3D block diagram (shares the map panel's cell) */
+.block3d-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  cursor: grab;
+}
+
+.block3d-wrap:active {
+  cursor: grabbing;
+}
+
 /* ------------------------------- timeline ------------------------------- */
 
 .timeline {
