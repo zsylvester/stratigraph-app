@@ -725,6 +725,15 @@ body {
     aspect-ratio: var(--map-aspect);
   }
 
+  .panel--maps .block3d-wrap {
+    /* the panel is content-sized on phones, so flex: 1 collapses to zero
+       height — size the 3D viewport by aspect ratio like the map */
+    flex: none;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    max-height: 70dvh;
+  }
+
   .timeline__controls {
     gap: 7px;
     padding: 0 10px;
