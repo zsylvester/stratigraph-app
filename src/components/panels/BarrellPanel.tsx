@@ -322,7 +322,7 @@ function drawBarrell(
   }
 
   ctx.fillStyle = theme.inkSoft
-  ctx.font = '10px "IBM Plex Mono", monospace'
+  ctx.font = '10px "Geist Mono", monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
   ctx.fillText('column', cx + cw / 2, f.y0 + f.h + 16)

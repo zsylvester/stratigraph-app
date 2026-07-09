@@ -35,7 +35,7 @@ export function drawColorbar(
   ctx.lineWidth = 1
   ctx.strokeRect(x + 0.5, y + 0.5, w, h)
 
-  ctx.font = '9px "IBM Plex Mono", monospace'
+  ctx.font = '9px "Geist Mono", monospace'
   ctx.fillStyle = theme.ink
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
@@ -66,7 +66,7 @@ export function drawSwatchLegend(
   theme: CbarTheme,
 ): void {
   ctx.save()
-  ctx.font = '9px "IBM Plex Mono", monospace'
+  ctx.font = '9px "Geist Mono", monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   entries.forEach((e, i) => {
@@ -111,7 +111,7 @@ export function drawHColorbar(
   }
   ctx.strokeStyle = theme.faint
   ctx.strokeRect(x + 0.5, y + 0.5, w, h)
-  ctx.font = '9px "IBM Plex Mono", monospace'
+  ctx.font = '9px "Geist Mono", monospace'
   ctx.textBaseline = 'bottom'
   ctx.lineWidth = 3
   ctx.strokeStyle = theme.paper

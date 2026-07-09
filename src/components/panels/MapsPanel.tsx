@@ -453,7 +453,7 @@ function drawMap(
   )
 
   // caption
-  ctx.font = '10px "IBM Plex Mono", monospace'
+  ctx.font = '10px "Geist Mono", monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'bottom'
   const units = dataset.manifest.elevationUnits

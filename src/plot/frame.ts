@@ -80,7 +80,7 @@ export function drawFrame(
   style: FrameStyle,
 ): void {
   ctx.save()
-  ctx.font = '10px "IBM Plex Mono", monospace'
+  ctx.font = '10px "Geist Mono", monospace'
   ctx.strokeStyle = style.faint
   ctx.fillStyle = style.ink
   ctx.lineWidth = 1

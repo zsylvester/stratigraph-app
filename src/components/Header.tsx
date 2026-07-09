@@ -11,7 +11,6 @@ export function Header() {
   return (
     <>
       <header className="header">
-        <div className="header__bands" aria-hidden="true" />
         <div className="header__mast">
           <img
             className="header__logo"
