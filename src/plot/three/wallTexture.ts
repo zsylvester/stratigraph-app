@@ -17,7 +17,8 @@
 import * as THREE from 'three'
 
 import type { Section } from '../../strat/core'
-import type { SectionTheme } from '../sectionPaint'
+import type { Frame } from '../frame'
+import { paintSectionBody, SectionTheme } from '../sectionPaint'
 import type { InitMsg, PaintedMsg, PaintMsg, WallInit } from './wallWorker'
 
 export interface WallSpec {
@@ -60,8 +61,11 @@ export interface WallsCtl {
 }
 
 interface Wall {
-  /** receives worker bitmaps zero-copy; CanvasTexture uploads from it */
-  blit: ImageBitmapRenderingContext
+  /** async mode: receives worker bitmaps zero-copy for the CanvasTexture */
+  blit: ImageBitmapRenderingContext | null
+  /** sync mode: painted directly on the main thread */
+  ctx2d: OffscreenCanvasRenderingContext2D | null
+  frame: Frame
   tex: THREE.CanvasTexture<OffscreenCanvas>
   mat: THREE.MeshBasicMaterial
   geom: THREE.BufferGeometry
@@ -85,16 +89,24 @@ export function buildWalls(
   const texH = many ? 512 : 1024
   const texW = (n: number) => Math.min(many ? 2048 : 4096, Math.max(256, n * 8))
 
-  // A small worker POOL paints walls concurrently (wall i → worker i mod P):
-  // batch latency is the slowest single wall instead of the sum of all four,
-  // which keeps the fill on the walls close behind the (synchronously
-  // updated) top surface during playback. Each worker gets its own copies of
-  // every section — the arrays may be views into the cached full topo volume
+  // Without a sea level there is no facies split — every mode uses the cheap
+  // layer-fill paint (~5-10 ms for four walls), so paint SYNCHRONOUSLY on
+  // the main thread. This matters for meanderpy: each migration event
+  // deposits a THICK layer, and even a one-step async lag behind the top
+  // surface flashes as a white band during playback (on the flume datasets
+  // the per-step increments are too thin to notice).
+  const sync = !opts.seaLevel
+
+  // Async mode: a small worker POOL paints walls concurrently (wall i →
+  // worker i mod P): batch latency is the slowest single wall instead of the
+  // sum of all four, which keeps the fill on the walls close behind the top
+  // surface during playback. Each worker gets its own copies of every
+  // section — the arrays may be views into the cached full topo volume
   // (transferring those would detach it), and workers don't share memory.
   const P = Math.max(1, Math.min(4, specs.length, (navigator.hardwareConcurrency || 4) - 2))
   const wallTexW = specs.map(({ sec }) => texW(sec.n))
   const workers: Worker[] = []
-  for (let p = 0; p < P; p++) {
+  for (let p = 0; p < (sync ? 0 : P); p++) {
     const worker = new Worker(new URL('./wallWorker.ts', import.meta.url), { type: 'module' })
     const wallInits: WallInit[] = specs.map(({ sec, skip }, i) => ({
       n: sec.n,
@@ -132,7 +144,20 @@ export function buildWalls(
   const walls: Wall[] = specs.map((spec, i) => {
     const { sec } = spec
     const canvas = new OffscreenCanvas(wallTexW[i], texH)
-    const blit = canvas.getContext('bitmaprenderer')!
+    // a canvas can hold only ONE context kind: 2d for sync painting,
+    // bitmaprenderer for worker bitmaps
+    const ctx2d = sync ? canvas.getContext('2d')! : null
+    const blit = sync ? null : canvas.getContext('bitmaprenderer')!
+    const frame: Frame = {
+      x0: 0,
+      y0: 0,
+      w: wallTexW[i],
+      h: texH,
+      xMin: sec.x[0],
+      xMax: sec.x[sec.n - 1],
+      yMin: yLo,
+      yMax: yHi,
+    }
     const tex = new THREE.CanvasTexture(canvas)
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = opts.anisotropy
@@ -159,7 +184,7 @@ export function buildWalls(
     geom.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2))
     geom.setIndex([0, 1, 2, 0, 2, 3])
     group.add(new THREE.Mesh(geom, mat))
-    return { blit, tex, mat, geom }
+    return { blit, ctx2d, frame, tex, mat, geom }
   })
 
   // Requests coalesce: while the worker is busy, only the LATEST wanted
@@ -208,6 +233,10 @@ export function buildWalls(
       return
     }
     const w = walls[wallId]
+    if (!w.blit) {
+      bitmap.close() // sync mode never spawns workers; defensive
+      return
+    }
     w.blit.transferFromImageBitmap(bitmap)
     w.tex.needsUpdate = true
     w.mat.visible = true
@@ -216,6 +245,39 @@ export function buildWalls(
   for (const w of workers) w.onmessage = onPainted
 
   const update = (k: number, o: WallPaintOpts, which?: number[], skippable = false): boolean => {
+    if (sync) {
+      // cheap layer-fill paint: draw right now, in step with the top surface
+      const ids = which ?? walls.map((_, i) => i)
+      for (const i of ids) {
+        const w = walls[i]
+        const spec = specs[i]
+        w.ctx2d!.clearRect(0, 0, w.frame.w, w.frame.h)
+        paintSectionBody(
+          w.ctx2d! as unknown as CanvasRenderingContext2D,
+          w.frame,
+          spec.sec,
+          Math.min(k, spec.sec.nt - 1),
+          o.theme,
+          {
+            seaLevel: null,
+            layerFacies: opts.layerFacies,
+            colorMode: o.colorMode,
+            bins: o.bins,
+            keySurfaceIndices: o.keySurfaceIndices,
+            showErosion: o.showErosion,
+            erosionRes: o.erosionRes,
+            drawWater: false,
+            skipMask: spec.skip,
+            lineScale: 2.5,
+            lineAlpha: 0.8,
+          },
+        )
+        w.tex.needsUpdate = true
+        w.mat.visible = true
+      }
+      opts.onPainted()
+      return true
+    }
     if (pending > 0) {
       // remember the newest request; playback ticks (skippable) are simply
       // dropped — the next tick will catch up
