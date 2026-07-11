@@ -669,8 +669,11 @@ body {
     grid-template-rows: auto auto 1fr var(--timeline-h);
   }
 
+  /* phones: two-row header — logo + theme toggle on top, the dataset picker
+     as a full-width horizontally scrollable strip beneath */
   .header {
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 0 10px;
   }
 
   .header__logo {
@@ -682,16 +685,24 @@ body {
   }
 
   .header__mast {
-    padding: 8px 0;
+    padding: 8px 0 8px 14px;
   }
 
   .picker {
-    margin-right: 8px;
+    order: 2;
+    flex: 1 1 100%;
+    margin: 0 14px 10px;
   }
 
   .picker__btn {
-    padding: 6px 8px;
-    font-size: 11.5px;
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex: 1; /* stretch across the row when there's room */
+  }
+
+  .theme-toggle {
+    margin-right: 14px;
   }
 
   .subhead {
