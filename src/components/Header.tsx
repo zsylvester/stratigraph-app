@@ -20,6 +20,19 @@ export function Header() {
           <span className="header__tagline">stratigraphy in space &amp; time</span>
         </div>
         <div className="header__spacer" />
+        {/* phones: native dropdown instead of the five-button strip */}
+        <select
+          className="picker-select"
+          value={datasetId ?? ''}
+          onChange={(e) => void selectDataset(e.target.value)}
+          aria-label="dataset"
+        >
+          {datasets.map((d) => (
+            <option key={d.id} value={d.id}>
+              {shortName(d.id, d.name)}
+            </option>
+          ))}
+        </select>
         <nav className="picker" aria-label="dataset">
           {datasets.map((d) => (
             <button
