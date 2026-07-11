@@ -104,7 +104,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
       lastRunRef.current = performance.now()
       const data =
         mode === 'topography'
-          ? topoSlice(volumes.topo, nRows, nCols, kk)
+          ? topoSlice(volumes.topo, volumes.subsid, nRows, nCols, kk)
           : computeThickness(volumes.topo, volumes.subsid, nLoc, nt, kk)
       setField({ data: boxBlur3(data, nRows, nCols), k: kk, mode })
     }
@@ -240,10 +240,22 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   )
 }
 
-function topoSlice(topo: NdArray, nRows: number, nCols: number, k: number): Float32Array {
+function topoSlice(
+  topo: NdArray,
+  subsid: NdArray | null,
+  nRows: number,
+  nCols: number,
+  k: number,
+): Float32Array {
   const out = new Float32Array(nRows * nCols)
   for (let r = 0; r < nRows; r++) {
-    for (let c = 0; c < nCols; c++) out[r * nCols + c] = topo.get(r, c, k)
+    for (let c = 0; c < nCols; c++) {
+      // sediment below the coeval basement is a scan artifact — clamp,
+      // like the 3D view (XES-02 has such cells in the distal corner)
+      const t = topo.get(r, c, k)
+      const s = subsid ? subsid.get(r, c, k) : -Infinity
+      out[r * nCols + c] = t < s ? s : t
+    }
   }
   return out
 }
@@ -261,10 +273,13 @@ function computeThickness(
   const out = new Float32Array(nLoc)
   for (let j = 0; j < nLoc; j++) {
     const b = j * nt
-    const yk = t[b + k] - (s ? s[b + k] : 0)
+    // with a basement, elevation above it is physically >= 0 — sub-basement
+    // scan cells would otherwise register phantom thickness
+    const yAt = (i: number) => (s ? Math.max(0, t[b + i] - s[b + i]) : t[b + i])
+    const yk = yAt(k)
     let mn = yk
     for (let i = k - 1; i >= 0; i--) {
-      const y = t[b + i] - (s ? s[b + i] : 0)
+      const y = yAt(i)
       if (y < mn) mn = y
     }
     out[j] = yk - mn
