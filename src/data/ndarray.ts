@@ -23,13 +23,4 @@ export class NdArray {
     return this.data[off]
   }
 
-  /**
-   * Contiguous subarray at a leading index: for shape (a, b, c), pick(i) is the
-   * (b, c) block. Zero-copy.
-   */
-  pick(i: number): NdArray {
-    const sub = this.shape.slice(1)
-    const size = this.strides[0]
-    return new NdArray(this.data.subarray(i * size, (i + 1) * size) as TypedData, sub)
-  }
 }

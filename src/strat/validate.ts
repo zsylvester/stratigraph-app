@@ -18,7 +18,9 @@ export async function validateXes02() {
   const refWs = await load(qc.wheelerStrat.path)
 
   const ds = await loadDataset('xes02')
-  const sec = await gridSection(ds, 'dip', qc.dipLoc)
+  // raw section (clean = null): the reference slices come from the Python
+  // pipeline, which knows nothing about the display cleanup
+  const sec = await gridSection(ds, 'dip', qc.dipLoc, null)
   const { n, nt } = sec
   const k = nt - 1
   const topoS = retroDeform(sec, k)

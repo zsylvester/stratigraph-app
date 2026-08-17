@@ -2,6 +2,8 @@ import { create } from 'zustand'
 
 import { Dataset, fetchIndex, loadDataset } from '../data/loader'
 import type { DatasetIndexEntry } from '../data/types'
+import type { GridClean } from '../plot/three/gridClean'
+import { gridCleanFor } from '../strat/clean'
 import { applyUrlState, parseHash } from './urlSync'
 
 /**
@@ -20,10 +22,19 @@ interface AppState {
   /** playback speed in time steps per second */
   stepsPerSecond: number
 
+  /**
+   * Display cleanup for the current grid3d dataset (spike mask, plateau
+   * wedges, junk-edge crop), or null while it is still being computed / for
+   * other dataset kinds. It bounds what the section and probe sliders offer,
+   * so every panel works over the same extent as the 3D block.
+   */
+  clean: GridClean | null
+
   /** current section: dip = fixed row, strike = fixed column (grid3d only) */
   sectionAxis: 'dip' | 'strike'
+  /** ABSOLUTE grid index of the section on the perpendicular axis */
   sectionIndex: number
-  /** location along the current section probed by the Barrell plot */
+  /** ABSOLUTE grid index along the current section, probed by the Barrell plot */
   probeIndex: number
   /** layer coloring shared by the cross section and the Barrell column */
   sectionColorMode: 'age' | 'facies'
@@ -89,6 +100,32 @@ export function sectionCount(dataset: Dataset | null, axis: 'dip' | 'strike'): n
   return axis === 'dip' ? shape[0] : shape[1]
 }
 
+/**
+ * Selectable section positions on the perpendicular axis, inclusive. Cropped
+ * to the clean sub-grid once known: the outer rows/columns are tank-wall junk
+ * or scan-margin noise, and the 3D block never shows them either.
+ */
+export function sectionIndexRange(
+  dataset: Dataset | null,
+  axis: 'dip' | 'strike',
+  clean: GridClean | null,
+): [number, number] {
+  if (!clean) return [0, sectionCount(dataset, axis) - 1]
+  return axis === 'dip' ? [clean.r0, clean.r1] : [clean.c0, clean.c1]
+}
+
+/** Selectable probe positions ALONG the current section, inclusive. */
+export function sectionSpanRange(
+  dataset: Dataset | null,
+  axis: 'dip' | 'strike',
+  clean: GridClean | null,
+): [number, number] {
+  if (!clean) return [0, sectionLength(dataset, axis) - 1]
+  return axis === 'dip' ? [clean.c0, clean.c1] : [clean.r0, clean.r1]
+}
+
+const clampTo = ([lo, hi]: [number, number], v: number) => Math.min(hi, Math.max(lo, Math.round(v)))
+
 export const useAppStore = create<AppState>((set, get) => ({
   datasets: [],
   datasetId: null,
@@ -97,6 +134,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   timeStep: 0,
   playing: false,
   stepsPerSecond: 30,
+  clean: null,
   sectionAxis: 'dip',
   sectionIndex: 0,
   probeIndex: 0,
@@ -126,7 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   selectDataset: async (id) => {
-    set({ datasetId: id, dataset: null, loadError: null, playing: false })
+    set({ datasetId: id, dataset: null, clean: null, loadError: null, playing: false })
     try {
       const ds = await loadDataset(id)
       // stale response guard: user may have switched again while loading
@@ -144,6 +182,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         sectionIndex: dipDefault,
         probeIndex: Math.floor(sectionLength(ds, 'dip') / 2),
         xZoom: null,
+      })
+      // the grid analysis takes ~1-2 s in a worker; panels render the raw
+      // extent until it lands, then re-render cropped and cleaned
+      void gridCleanFor(ds).then((clean) => {
+        if (get().datasetId !== id || !clean) return
+        set({ clean })
+        // re-clamp: the displayed extent is narrower than the raw grid
+        const { sectionAxis, sectionIndex, probeIndex } = get()
+        set({
+          sectionIndex: clampTo(sectionIndexRange(ds, sectionAxis, clean), sectionIndex),
+          probeIndex: clampTo(sectionSpanRange(ds, sectionAxis, clean), probeIndex),
+        })
       })
     } catch (e) {
       if (get().datasetId === id) set({ loadError: String(e) })
@@ -173,22 +223,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   setStepsPerSecond: (s) => set({ stepsPerSecond: s }),
 
   setSection: (axis, index) => {
-    const ds = get().dataset
-    const nSec = sectionCount(ds, axis)
-    const clamped = Math.min(nSec - 1, Math.max(0, Math.round(index)))
-    const nLen = sectionLength(ds, axis)
+    const { dataset: ds, clean } = get()
     set({
       sectionAxis: axis,
-      sectionIndex: clamped,
-      probeIndex: Math.min(nLen - 1, get().probeIndex),
+      sectionIndex: clampTo(sectionIndexRange(ds, axis, clean), index),
+      probeIndex: clampTo(sectionSpanRange(ds, axis, clean), get().probeIndex),
       // a different section has a different distance axis
       xZoom: axis === get().sectionAxis ? get().xZoom : null,
     })
   },
 
   setProbeIndex: (i) => {
-    const nLen = sectionLength(get().dataset, get().sectionAxis)
-    set({ probeIndex: Math.min(nLen - 1, Math.max(0, Math.round(i))) })
+    const { dataset: ds, sectionAxis, clean } = get()
+    set({ probeIndex: clampTo(sectionSpanRange(ds, sectionAxis, clean), i) })
   },
 
   setSectionColorMode: (m) => set({ sectionColorMode: m }),

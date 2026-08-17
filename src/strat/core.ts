@@ -10,6 +10,7 @@
 import type { Dataset } from '../data/loader'
 import type { NdArray } from '../data/ndarray'
 import type { SpaceGrid3d, SpaceSection2d } from '../data/types'
+import type { GridClean } from '../plot/three/gridClean'
 
 export interface Section {
   /** number of points along the section */
@@ -18,6 +19,17 @@ export interface Section {
   nt: number
   /** distance coordinate of each point, in space units */
   x: Float64Array
+  /**
+   * Absolute grid index (along the section axis) of point 0. Nonzero when the
+   * section is cropped to the clean sub-grid: the shared probe/hover indices
+   * are ABSOLUTE, so panels map them through `localIndex`.
+   */
+  offset: number
+  /**
+   * Per-point pen-up mask (1 = draw no strata or surface lines through this
+   * point), from the constant-fill plateau wedges; null when there are none.
+   */
+  skip: Uint8Array | null
   /** (n, nt) topographic elevation */
   topo: Float32Array
   /** (n, nt) basement elevation (subsidence/uplift history), or null */
@@ -39,6 +51,14 @@ export interface Section {
 }
 
 export type SectionAxis = 'dip' | 'strike'
+
+/**
+ * Local index into a (possibly cropped) section for an ABSOLUTE grid index —
+ * the frame the shared probe/hover state lives in. Clamped to the section.
+ */
+export function localIndex(sec: Section, absolute: number): number {
+  return Math.min(sec.n - 1, Math.max(0, absolute - sec.offset))
+}
 
 /** Threshold smoothing + diff sign, matching create_wheeler_diagram's masking. */
 export function classify(e: Float32Array | Float64Array, n0: number, nt: number, res: number, out: Int8Array, o0: number): void {
@@ -132,12 +152,32 @@ export function wheelerStrat(
   return r
 }
 
-/** Gather a dip or strike section from a grid3d dataset's volumes. */
-export async function gridSection(dataset: Dataset, axis: SectionAxis, index: number): Promise<Section> {
+/** Inclusive [lo, hi] extent of a section along its own axis. */
+export function sectionExtent(
+  space: SpaceGrid3d,
+  axis: SectionAxis,
+  clean: GridClean | null,
+): [number, number] {
+  const [nRows, nCols] = space.shape
+  if (axis === 'dip') return clean ? [clean.c0, clean.c1] : [0, nCols - 1]
+  return clean ? [clean.r0, clean.r1] : [0, nRows - 1]
+}
+
+/**
+ * Gather a dip or strike section from a grid3d dataset's volumes. With a
+ * gridClean analysis the section is the DISPLAY section — cropped to the
+ * clean sub-grid, despiked, basement-clamped, plateau wedges masked — i.e.
+ * exactly what the 3D block diagram drapes on its walls. Pass null for the
+ * raw section (validation against the Python pipeline).
+ */
+export async function gridSection(
+  dataset: Dataset,
+  axis: SectionAxis,
+  index: number,
+  clean: GridClean | null,
+): Promise<Section> {
   const m = dataset.manifest
   const space = m.space as SpaceGrid3d
-  const [nRows, nCols] = space.shape
-  const [dRow, dCol] = space.spacing
   const nt = m.time.n
   // subsid is optional: experiments scanned in an absolute frame don't have one
   const hasSubsid = !!m.arrays.subsid
@@ -146,54 +186,33 @@ export async function gridSection(dataset: Dataset, axis: SectionAxis, index: nu
     hasSubsid ? dataset.array('subsid') : Promise.resolve(null),
     dataset.array('wheelerClass'),
   ])
+  const [lo, hi] = sectionExtent(space, axis, clean)
+  return gridSectionSlice(topoV, subsidV, space, nt, axis, index, lo, hi, { clean, cls: clsV })
+}
 
-  if (axis === 'dip') {
-    // fix a row: contiguous (nCols, nt) block
-    const r = Math.min(nRows - 1, Math.max(0, index))
-    const x = Float64Array.from({ length: nCols }, (_, j) => j * dCol)
-    return {
-      n: nCols,
-      nt,
-      x,
-      topo: topoV.pick(r).data as Float32Array,
-      subsid: subsidV ? (subsidV.pick(r).data as Float32Array) : null,
-      cls: clsV.pick(r).data as Int8Array,
-      deformation: 'snapshot',
-    }
-  }
-  // strike: fix a column, gather across rows
-  const c = Math.min(nCols - 1, Math.max(0, index))
-  const x = Float64Array.from({ length: nRows }, (_, j) => j * dRow)
-  const topo = new Float32Array(nRows * nt)
-  const subsid = subsidV ? new Float32Array(nRows * nt) : null
-  const cls = new Int8Array(nRows * (nt - 1))
-  for (let r = 0; r < nRows; r++) {
-    const src = (r * nCols + c) * nt
-    topo.set((topoV.data as Float32Array).subarray(src, src + nt), r * nt)
-    if (subsid && subsidV) {
-      subsid.set((subsidV.data as Float32Array).subarray(src, src + nt), r * nt)
-    }
-    const srcC = (r * nCols + c) * (nt - 1)
-    cls.set((clsV.data as Int8Array).subarray(srcC, srcC + (nt - 1)), r * (nt - 1))
-  }
-  return { n: nRows, nt, x, topo, subsid, cls, deformation: 'snapshot' }
+export interface SliceOpts {
+  /**
+   * Display cleanup to apply (plot/three/gridClean.ts). When present, spike
+   * cells are interpolated away, topo is clamped to the basement, and the
+   * plateau wedges become the section's `skip` mask. Null/absent = raw.
+   */
+  clean?: GridClean | null
+  /** classification volume to slice alongside (derived/wheelerClass) */
+  cls?: NdArray | null
 }
 
 /**
  * Slice a dip/strike section from already-loaded grid3d volumes, restricted
  * to [lo, hi] (inclusive) along the section, with x in ABSOLUTE grid
- * coordinates so callers can place it in world space. Used by the 3D block
- * diagram (sub-block walls, cut faces). Classification is not computed —
- * the section painter doesn't use it.
+ * coordinates so callers can place it in world space.
  *
- * If a spike mask is given (see plot/three/gridClean.ts), flagged points are
- * linearly interpolated from their nearest clean neighbors along the section
- * (the whole elevation history), so wall top edges and bounds stay sane.
- *
- * When a basement (subsid) volume exists, topo is clamped to it: a sediment
- * surface below the basement is physically impossible, but the XES-02 scans
- * contain such holes (up to ~240 mm deep in the distal basin) and the
- * running-minimum stratigraphy preserves them forever.
+ * With a clean analysis: spike-flagged points are linearly interpolated from
+ * their nearest clean neighbors along the section (the whole elevation
+ * history), so top edges and bounds stay sane; topo is clamped to the
+ * basement, because a sediment surface below the basement is physically
+ * impossible but the XES-02 scans contain such holes (up to ~240 mm deep in
+ * the distal basin) and the running-minimum stratigraphy preserves them
+ * forever; and the constant-fill plateau wedges become the `skip` mask.
  */
 export function gridSectionSlice(
   topoV: NdArray,
@@ -204,29 +223,33 @@ export function gridSectionSlice(
   index: number,
   lo: number,
   hi: number,
-  bad?: Uint8Array,
+  opts?: SliceOpts,
 ): Section {
   const [nRows, nCols] = space.shape
   const [dRow, dCol] = space.spacing
   const n = hi - lo + 1
   const tSrc = topoV.data as Float32Array
   const sSrc = subsidV ? (subsidV.data as Float32Array) : null
+  const clean = opts?.clean ?? null
+  const bad = clean?.bad
+  const idx =
+    axis === 'dip'
+      ? Math.min(nRows - 1, Math.max(0, index))
+      : Math.min(nCols - 1, Math.max(0, index))
 
   const cellOf = (j: number) =>
-    axis === 'dip' ? index * nCols + (lo + j) : (lo + j) * nCols + index
+    axis === 'dip' ? idx * nCols + (lo + j) : (lo + j) * nCols + idx
 
   let topo: Float32Array
   let subsid: Float32Array | null = null
   if (axis === 'dip') {
-    const r = Math.min(nRows - 1, Math.max(0, index))
-    topo = tSrc.subarray((r * nCols + lo) * nt, (r * nCols + hi + 1) * nt)
-    if (sSrc) subsid = sSrc.subarray((r * nCols + lo) * nt, (r * nCols + hi + 1) * nt)
+    topo = tSrc.subarray((idx * nCols + lo) * nt, (idx * nCols + hi + 1) * nt)
+    if (sSrc) subsid = sSrc.subarray((idx * nCols + lo) * nt, (idx * nCols + hi + 1) * nt)
   } else {
-    const c = Math.min(nCols - 1, Math.max(0, index))
     topo = new Float32Array(n * nt)
     if (sSrc) subsid = new Float32Array(n * nt)
     for (let j = 0; j < n; j++) {
-      const src = ((lo + j) * nCols + c) * nt
+      const src = ((lo + j) * nCols + idx) * nt
       topo.set(tSrc.subarray(src, src + nt), j * nt)
       if (subsid && sSrc) subsid.set(sSrc.subarray(src, src + nt), j * nt)
     }
@@ -272,7 +295,7 @@ export function gridSectionSlice(
     }
   }
 
-  if (subsid) {
+  if (clean && subsid) {
     let violates = false
     for (let i = 0; i < n * nt; i++) {
       if (topo[i] < subsid[i]) {
@@ -288,9 +311,40 @@ export function gridSectionSlice(
     }
   }
 
+  // pen-up mask where the section crosses a constant-fill plateau wedge: the
+  // painter leaves the wedge as solid basement up to the plateau level
+  let skip: Uint8Array | null = null
+  if (clean) {
+    const mask = new Uint8Array(n)
+    let any = false
+    for (let j = 0; j < n; j++) {
+      if (clean.exempt[cellOf(j)]) {
+        mask[j] = 1
+        any = true
+      }
+    }
+    if (any) skip = mask
+  }
+
+  // classification (deposition/erosion/stasis), sliced to the same window
+  let cls = new Int8Array(0)
+  const clsSrc = opts?.cls ? (opts.cls.data as Int8Array) : null
+  if (clsSrc) {
+    const ni = nt - 1
+    if (axis === 'dip') {
+      cls = clsSrc.subarray((idx * nCols + lo) * ni, (idx * nCols + hi + 1) * ni) as Int8Array
+    } else {
+      cls = new Int8Array(n * ni)
+      for (let j = 0; j < n; j++) {
+        const src = ((lo + j) * nCols + idx) * ni
+        cls.set(clsSrc.subarray(src, src + ni), j * ni)
+      }
+    }
+  }
+
   const step = axis === 'dip' ? dCol : dRow
   const x = Float64Array.from({ length: n }, (_, j) => (lo + j) * step)
-  return { n, nt, x, topo, subsid, cls: new Int8Array(0), deformation: 'snapshot' }
+  return { n, nt, x, offset: lo, skip, topo, subsid, cls, deformation: 'snapshot' }
 }
 
 /** Build the (single) section of a section2d dataset; computes classification. */
@@ -319,7 +373,7 @@ export async function section2d(dataset: Dataset): Promise<Section> {
   const x = Float64Array.from({ length: nx }, (_, j) => space.x0 + j * space.dx)
   const deformation =
     m.processing.deformation === 'final-datum' ? 'final-datum' : 'snapshot'
-  return { n: nx, nt, x, topo, subsid, cls, deformation }
+  return { n: nx, nt, x, offset: 0, skip: null, topo, subsid, cls, deformation }
 }
 
 /**

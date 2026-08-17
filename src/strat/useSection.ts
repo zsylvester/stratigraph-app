@@ -18,6 +18,8 @@ export interface SectionState {
 export function useSection(dataset: Dataset): SectionState | null {
   const sectionAxis = useAppStore((s) => s.sectionAxis)
   const sectionIndex = useAppStore((s) => s.sectionIndex)
+  // shared with the 3D block: same crop, same despiking, same plateau masking
+  const clean = useAppStore((s) => s.clean)
   const [state, setState] = useState<SectionState | null>(null)
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function useSection(dataset: Dataset): SectionState | null {
     let cancelled = false
     const p =
       kind === 'grid3d'
-        ? gridSection(dataset, sectionAxis, sectionIndex)
+        ? gridSection(dataset, sectionAxis, sectionIndex, clean)
         : section2d(dataset)
     void p.then((section) => {
       if (cancelled) return
@@ -42,7 +44,7 @@ export function useSection(dataset: Dataset): SectionState | null {
     return () => {
       cancelled = true
     }
-  }, [dataset, sectionAxis, sectionIndex])
+  }, [dataset, sectionAxis, sectionIndex, clean])
 
   return state
 }

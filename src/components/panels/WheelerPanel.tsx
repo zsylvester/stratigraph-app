@@ -11,7 +11,7 @@ import {
   xPix,
   yPix,
 } from '../../plot/frame'
-import { retroDeform, stratUpTo, wheelerStrat } from '../../strat/core'
+import { localIndex, retroDeform, stratUpTo, wheelerStrat } from '../../strat/core'
 import { wheelerColor } from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
 import { useAppStore } from '../../state/store'
@@ -70,11 +70,12 @@ export function WheelerPanel({ dataset }: { dataset: Dataset }) {
     const fx = (e.clientX - rect.left - f.x0) / f.w
     const fy = 1 - (e.clientY - rect.top - f.y0) / f.h
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null
-    // zoom-aware: go through data coordinates
-    const { x, n } = state.section
+    // zoom-aware: go through data coordinates. The result is an ABSOLUTE grid
+    // index — the frame the shared probe/hover state lives in.
+    const { x, n, offset } = state.section
     const xData = f.xMin + fx * (f.xMax - f.xMin)
     const step = (x[n - 1] - x[0]) / (n - 1)
-    const index = Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
+    const index = offset + Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
     // invert the (possibly non-uniform) time axis
     const tf = dataset.manifest.time.displayFactor
     const target = f.yMin + fy * (f.yMax - f.yMin)
@@ -194,7 +195,7 @@ function drawWheeler(
   ctx.stroke()
 
   // probe location marker
-  const pj = Math.min(n - 1, probeIndex)
+  const pj = localIndex(sec, probeIndex)
   ctx.beginPath()
   ctx.moveTo(xPix(f, x[pj]) + 0.5, f.y0)
   ctx.lineTo(xPix(f, x[pj]) + 0.5, f.y0 + f.h)
@@ -206,7 +207,7 @@ function drawWheeler(
 
   // linked hover ghost (crosshair when the hover carries a time)
   if (hover) {
-    const hj = Math.min(n - 1, hover.index)
+    const hj = localIndex(sec, hover.index)
     ctx.globalAlpha = 0.45
     ctx.strokeStyle = theme.ink
     ctx.setLineDash([1, 3])

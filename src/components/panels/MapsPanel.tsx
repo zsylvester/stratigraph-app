@@ -7,7 +7,7 @@ import { drawHColorbar } from '../../plot/colorbar'
 import { boxBlur3, contourLevels, drawContour } from '../../plot/contours'
 import { themeColors } from '../../plot/frame'
 import { deepR, hexToRgb } from '../../strat/colormaps'
-import { useAppStore } from '../../state/store'
+import { sectionSpanRange, useAppStore } from '../../state/store'
 
 // three.js only downloads when someone opens the 3D tab
 const Panel3D = lazy(() =>
@@ -43,6 +43,7 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const setHover = useAppStore((s) => s.setHover)
   const xZoom = useAppStore((s) => s.xZoom) // cross-section zoom window
   const probeIndex = useAppStore((s) => s.probeIndex) // Barrell column location
+  const clean = useAppStore((s) => s.clean) // displayed extent of the section
   const [mode, setMode] = useState<MapMode>('topography')
   // plan-view map or the 3D block diagram, sharing this panel's grid cell
   const [view, setView] = useState<'map' | '3d'>('map')
@@ -125,14 +126,17 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     const canvas = canvasRef.current
     if (!canvas || !field || !volumes) return
     const draw = () =>
-      drawMap(canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover, xZoom, probeIndex)
+      drawMap(
+        canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover, xZoom, probeIndex,
+        sectionSpanRange(dataset, sectionAxis, clean),
+      )
     draw()
     // the canvas is sized by drawMap to fit its wrapper at the physical
     // aspect ratio, so watch the wrapper, not the canvas
     const ro = new ResizeObserver(draw)
     ro.observe(canvas.parentElement ?? canvas)
     return () => ro.disconnect()
-  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme, xZoom, probeIndex])
+  }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme, xZoom, probeIndex, clean])
 
   const moveSection = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -297,6 +301,8 @@ function drawMap(
   hover: { index: number; time: number | null } | null,
   xZoom: [number, number] | null,
   probeIndex: number,
+  /** inclusive grid index range the section actually spans */
+  span: [number, number],
 ) {
   const theme = themeColors(canvas)
   const space = dataset.manifest.space as SpaceGrid3d
@@ -394,15 +400,19 @@ function drawMap(
   const tracePx =
     sectionAxis === 'dip' ? ((sectionIndex + 0.5) / nRows) * h : ((sectionIndex + 0.5) / nCols) * w
 
+  // the trace stops where the section does: the outer rows/columns are junk
+  // scan lines and no panel shows them
+  const spanA = alongPx(span[0] * (sectionAxis === 'dip' ? dCol : dRow))
+  const spanB = alongPx(span[1] * (sectionAxis === 'dip' ? dCol : dRow))
   ctx.strokeStyle = theme.ero
   ctx.lineWidth = xZoom ? 1 : 2
   ctx.beginPath()
   if (sectionAxis === 'dip') {
-    ctx.moveTo(0, tracePx)
-    ctx.lineTo(w, tracePx)
+    ctx.moveTo(spanA, tracePx)
+    ctx.lineTo(spanB, tracePx)
   } else {
-    ctx.moveTo(tracePx, 0)
-    ctx.lineTo(tracePx, h)
+    ctx.moveTo(tracePx, spanA)
+    ctx.lineTo(tracePx, spanB)
   }
   ctx.stroke()
   if (xZoom) {

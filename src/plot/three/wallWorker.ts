@@ -77,6 +77,10 @@ self.onmessage = (e: MessageEvent<InitMsg | PaintMsg>) => {
           n: w.n,
           nt: w.nt,
           x: w.x,
+          // the wall paints in data coordinates only; the absolute index
+          // offset and the pen-up mask travel alongside as `skip`
+          offset: 0,
+          skip: w.skip,
           topo: w.topo,
           subsid: w.subsid,
           deformation: w.deformation,

@@ -6,12 +6,12 @@ import type { NdArray } from '../../data/ndarray'
 import type { SpaceGrid3d } from '../../data/types'
 import { themeColors } from '../../plot/frame'
 import type { GridClean } from '../../plot/three/gridClean'
-import type { AnalyzeMsg } from '../../plot/three/gridCleanWorker'
 import { createScene, SceneCtl } from '../../plot/three/scene'
 import { buildTopoMesh, TopoDims, TopoMeshCtl } from '../../plot/three/topoMesh'
 import { buildWalls, WallsCtl, WallSpec } from '../../plot/three/wallTexture'
+import { gridCleanFor } from '../../strat/clean'
 import { gridSectionSlice, sectionBounds } from '../../strat/core'
-import { useAppStore } from '../../state/store'
+import { sectionIndexRange, useAppStore } from '../../state/store'
 
 /**
  * 3D block diagram (grid3d datasets): the current topography as a shaded
@@ -28,27 +28,6 @@ import { useAppStore } from '../../state/store'
 
 type ViewMode = 'block' | '2×2' | '3×3' | 'dip cut' | 'strike cut'
 const VIEW_MODES: ViewMode[] = ['block', '2×2', '3×3', 'dip cut', 'strike cut']
-
-// grid analysis takes ~1-2 s on the big volumes, so it runs in a worker (the
-// UI stays live) and is cached — the panel remounts on every map↔3D toggle
-const cleanCache = new Map<string, GridClean>()
-
-function analyzeInWorker(msg: AnalyzeMsg): Promise<GridClean> {
-  return new Promise((resolve, reject) => {
-    const w = new Worker(new URL('../../plot/three/gridCleanWorker.ts', import.meta.url), {
-      type: 'module',
-    })
-    w.onmessage = (e: MessageEvent<GridClean>) => {
-      w.terminate()
-      resolve(e.data)
-    }
-    w.onerror = (e) => {
-      w.terminate()
-      reject(new Error(e.message))
-    }
-    w.postMessage(msg, [msg.data.buffer])
-  })
-}
 
 interface Base {
   sceneCtl: SceneCtl
@@ -94,19 +73,17 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
   // cut modes: show the block on the other side of the cut plane
   const [cutFlip, setCutFlip] = useState(false)
 
-  // cut position: the shared section index when the axes match, else center
-  const space = dataset.manifest.space as SpaceGrid3d
-  const [nRows, nCols] = space.shape
-  const cutPos =
-    mode === 'dip cut'
-      ? sectionAxis === 'dip'
-        ? sectionIndex
-        : Math.floor(nRows / 2)
-      : mode === 'strike cut'
-        ? sectionAxis === 'strike'
-          ? sectionIndex
-          : Math.floor(nCols / 2)
-        : -1
+  // cut position: the shared section index when the axes match, else center.
+  // The slider spans exactly the same positions the cross-section panel
+  // offers, so every section is reachable from either panel.
+  const clean = useAppStore((s) => s.clean)
+  const cutAxis = mode === 'dip cut' ? 'dip' : mode === 'strike cut' ? 'strike' : null
+  const [cutLo, cutHi] = sectionIndexRange(dataset, cutAxis ?? 'dip', clean)
+  const cutPos = !cutAxis
+    ? -1
+    : sectionAxis === cutAxis
+      ? sectionIndex
+      : Math.floor((cutLo + cutHi) / 2)
 
   // ------------------------- dataset-level setup -------------------------
   useEffect(() => {
@@ -129,19 +106,10 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
         m.derived?.layerFacies ? dataset.array('layerFacies') : Promise.resolve(null),
       ])
       if (cancelled) return
-      let clean = cleanCache.get(m.id)
-      if (!clean) {
-        clean = await analyzeInWorker({
-          data: new Float32Array(topoV.data as Float32Array), // transferred away
-          nRows: nR,
-          nCols: nC,
-          nt,
-          res: m.processing.resolution,
-          hasSubsid: !!subsidV,
-        })
-        cleanCache.set(m.id, clean)
-        if (cancelled) return
-      }
+      // same analysis the 2D panels use (cached per dataset), so a wall and
+      // the cross section at the same index are the same section
+      const clean = await gridCleanFor(dataset)
+      if (cancelled || !clean) return
 
       // shared vertical extent from sampled (despiked) sections, so every
       // view mode frames the same prism
@@ -150,8 +118,8 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       const bounds = (axis: 'dip' | 'strike', index: number) => {
         const b = sectionBounds(
           axis === 'dip'
-            ? gridSectionSlice(topoV, subsidV, sp, nt, 'dip', index, clean.c0, clean.c1, clean.bad)
-            : gridSectionSlice(topoV, subsidV, sp, nt, 'strike', index, clean.r0, clean.r1, clean.bad),
+            ? gridSectionSlice(topoV, subsidV, sp, nt, 'dip', index, clean.c0, clean.c1, { clean })
+            : gridSectionSlice(topoV, subsidV, sp, nt, 'strike', index, clean.r0, clean.r1, { clean }),
         )
         if (b.lo < lo) lo = b.lo
         if (b.hi > hi) hi = b.hi
@@ -256,16 +224,20 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
           }
         }
       } else if (mode === 'dip cut') {
-        const cut = Math.min(R1 - 1, Math.max(R0 + 1, cutPos))
+        // every section in [R0, R1] must be cuttable; at either end only one
+        // side of the plane has a block left, so force the side that does
+        const cut = Math.min(R1, Math.max(R0, cutPos))
+        const keepFar = cut <= R0 ? true : cut >= R1 ? false : cutFlip
         blockRanges = [
-          cutFlip
+          keepFar
             ? { r0: cut, r1: R1, c0: C0, c1: C1, ox: 0, oz: 0 }
             : { r0: R0, r1: cut, c0: C0, c1: C1, ox: 0, oz: 0 },
         ]
       } else if (mode === 'strike cut') {
-        const cut = Math.min(C1 - 1, Math.max(C0 + 1, cutPos))
+        const cut = Math.min(C1, Math.max(C0, cutPos))
+        const keepFar = cut <= C0 ? true : cut >= C1 ? false : cutFlip
         blockRanges = [
-          cutFlip
+          keepFar
             ? { r0: R0, r1: R1, c0: cut, c1: C1, ox: 0, oz: 0 }
             : { r0: R0, r1: R1, c0: C0, c1: cut, ox: 0, oz: 0 },
         ]
@@ -285,28 +257,27 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
         )
         topos.push(topo)
         group.add(topo.mesh)
+        // the section carries its own pen-up mask for plateau wedges, so a
+        // wall is exactly the section the 2D panel would draw at that index
         const slice = (axis: 'dip' | 'strike', index: number, lo: number, hi: number) =>
-          gridSectionSlice(b.topoV, b.subsidV, sp, nt, axis, index, lo, hi, clean.bad)
-        // pen-up mask where the wall crosses a plateau wedge: the painter
-        // then leaves the wedge as solid basement up to the plateau level
-        const wallSkip = (axis: 'dip' | 'strike', index: number, lo: number, hi: number) => {
-          const m = new Uint8Array(hi - lo + 1)
-          let any = false
-          for (let j = 0; j < m.length; j++) {
-            const cell =
-              axis === 'dip' ? index * dims.nCols + (lo + j) : (lo + j) * dims.nCols + index
-            if (clean.exempt[cell]) {
-              m[j] = 1
-              any = true
-            }
-          }
-          return any ? m : undefined
+          gridSectionSlice(b.topoV, b.subsidV, sp, nt, axis, index, lo, hi, { clean })
+        const spec = (
+          axis: 'dip' | 'strike',
+          index: number,
+          lo: number,
+          hi: number,
+          plane: 'x' | 'z',
+          planePos: number,
+          outward: 1 | -1,
+        ): WallSpec => {
+          const sec = slice(axis, index, lo, hi)
+          return { sec, skip: sec.skip ?? undefined, plane, planePos, ox: br.ox, oz: br.oz, outward }
         }
         wallSpecs.push(
-          { sec: slice('dip', br.r0, br.c0, br.c1), skip: wallSkip('dip', br.r0, br.c0, br.c1), plane: 'z', planePos: br.r0 * dRow, ox: br.ox, oz: br.oz, outward: -1 },
-          { sec: slice('dip', br.r1, br.c0, br.c1), skip: wallSkip('dip', br.r1, br.c0, br.c1), plane: 'z', planePos: br.r1 * dRow, ox: br.ox, oz: br.oz, outward: 1 },
-          { sec: slice('strike', br.c0, br.r0, br.r1), skip: wallSkip('strike', br.c0, br.r0, br.r1), plane: 'x', planePos: br.c0 * dCol, ox: br.ox, oz: br.oz, outward: -1 },
-          { sec: slice('strike', br.c1, br.r0, br.r1), skip: wallSkip('strike', br.c1, br.r0, br.r1), plane: 'x', planePos: br.c1 * dCol, ox: br.ox, oz: br.oz, outward: 1 },
+          spec('dip', br.r0, br.c0, br.c1, 'z', br.r0 * dRow, -1),
+          spec('dip', br.r1, br.c0, br.c1, 'z', br.r1 * dRow, 1),
+          spec('strike', br.c0, br.r0, br.r1, 'x', br.c0 * dCol, -1),
+          spec('strike', br.c1, br.r0, br.r1, 'x', br.c1 * dCol, 1),
         )
       }
       const walls = buildWalls(wallSpecs, {
@@ -420,8 +391,11 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
     setMode(vm)
     // align the shared section with the cut so the cross-section panel and
     // map trace show the face being cut
-    if (vm === 'dip cut' && sectionAxis !== 'dip') setSection('dip', Math.floor(nRows / 2))
-    if (vm === 'strike cut' && sectionAxis !== 'strike') setSection('strike', Math.floor(nCols / 2))
+    const axis = vm === 'dip cut' ? 'dip' : vm === 'strike cut' ? 'strike' : null
+    if (axis && sectionAxis !== axis) {
+      const [lo, hi] = sectionIndexRange(dataset, axis, clean)
+      setSection(axis, Math.floor((lo + hi) / 2))
+    }
   }
 
   return (
@@ -446,23 +420,24 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
             </button>
           ))}
         </div>
-        {(mode === 'dip cut' || mode === 'strike cut') && (
+        {cutAxis && (
           <>
             <span className="controls-row__label">cut</span>
             <input
               type="range"
               className="mini-slider"
               style={{ flex: '0 1 110px' }}
-              min={0}
-              max={(mode === 'dip cut' ? nRows : nCols) - 1}
+              min={cutLo}
+              max={cutHi}
               value={cutPos}
               onChange={(e) =>
                 // drives the SHARED section, so the map trace and the
                 // cross-section panel follow the cut face
-                setSection(mode === 'dip cut' ? 'dip' : 'strike', Number(e.target.value))
+                setSection(cutAxis, Number(e.target.value))
               }
               aria-label="cut position"
             />
+            <span className="controls-row__readout">{cutPos}</span>
             <button
               className={`seg__btn seg__btn--solo${cutFlip ? ' is-active' : ''}`}
               onClick={() => setCutFlip((v) => !v)}

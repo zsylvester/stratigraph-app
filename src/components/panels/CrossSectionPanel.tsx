@@ -12,8 +12,9 @@ import {
 } from '../../plot/frame'
 import { paintSectionBody } from '../../plot/sectionPaint'
 import { EROSION_ON_FACIES, FACIES_COLORS, LAYER_FACIES_COLORS, viridis } from '../../strat/colormaps'
+import { localIndex } from '../../strat/core'
 import { useSection } from '../../strat/useSection'
-import { sectionCount, useAppStore } from '../../state/store'
+import { sectionIndexRange, useAppStore } from '../../state/store'
 
 type ColorMode = 'age' | 'facies'
 
@@ -126,17 +127,18 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     // thin ribbons at true scale, so this is a starting point for zooming
     const xspan = (d.y1 - d.y0) * 40
     if (xspan >= (d.x1 - d.x0) * 0.999) return // whole section visible at 1:1
-    const { x, n } = state.section
+    const { x } = state.section
     const half = xspan / 2
     const cx = Math.max(
       d.x0 + half,
-      Math.min(d.x1 - half, x[Math.min(n - 1, probeIndex)]),
+      Math.min(d.x1 - half, x[localIndex(state.section, probeIndex)]),
     )
     setXZoom([cx - half, cx + half])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [equalAxes, xZoom, state])
 
-  // pointer position -> index along the section (zoom-aware: via data coords)
+  // pointer position -> ABSOLUTE grid index along the section (zoom-aware:
+  // via data coords, so it survives the crop to the clean sub-grid)
   const indexAtPx = (clientX: number): number | null => {
     const f = frameRef.current
     const canvas = canvasRef.current
@@ -144,10 +146,10 @@ export function CrossSectionPanel({ dataset }: { dataset: Dataset }) {
     const rect = canvas.getBoundingClientRect()
     const frac = (clientX - rect.left - f.x0) / f.w
     if (frac < 0 || frac > 1) return null
-    const { x, n } = state.section
+    const { x, n, offset } = state.section
     const xData = f.xMin + frac * (f.xMax - f.xMin)
     const step = (x[n - 1] - x[0]) / (n - 1)
-    return Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
+    return offset + Math.min(n - 1, Math.max(0, Math.round((xData - x[0]) / step)))
   }
 
   /**
@@ -450,8 +452,11 @@ export function SectionControls({ dataset }: { dataset: Dataset }) {
   const sectionAxis = useAppStore((s) => s.sectionAxis)
   const sectionIndex = useAppStore((s) => s.sectionIndex)
   const setSection = useAppStore((s) => s.setSection)
+  const clean = useAppStore((s) => s.clean)
   if (dataset.manifest.kind !== 'grid3d') return null
-  const nSec = sectionCount(dataset, sectionAxis)
+  // only positions the 3D block also shows: the outer rows/columns are tank-
+  // wall junk and scan-margin noise
+  const [lo, hi] = sectionIndexRange(dataset, sectionAxis, clean)
   return (
     <>
       <div className="seg">
@@ -459,7 +464,11 @@ export function SectionControls({ dataset }: { dataset: Dataset }) {
           <button
             key={a}
             className={`seg__btn${a === sectionAxis ? ' is-active' : ''}`}
-            onClick={() => setSection(a, a === sectionAxis ? sectionIndex : Math.floor(sectionCount(dataset, a) / 2))}
+            onClick={() => {
+              if (a === sectionAxis) return setSection(a, sectionIndex)
+              const [aLo, aHi] = sectionIndexRange(dataset, a, clean)
+              setSection(a, Math.floor((aLo + aHi) / 2))
+            }}
           >
             {a}
           </button>
@@ -468,14 +477,14 @@ export function SectionControls({ dataset }: { dataset: Dataset }) {
       <input
         type="range"
         className="mini-slider"
-        min={0}
-        max={nSec - 1}
+        min={lo}
+        max={hi}
         value={sectionIndex}
         onChange={(e) => setSection(sectionAxis, Number(e.target.value))}
         aria-label="section position"
       />
       <span className="controls-row__readout">
-        {sectionAxis} {sectionIndex}/{nSec - 1}
+        {sectionAxis} {sectionIndex}/{hi}
       </span>
     </>
   )
@@ -534,6 +543,10 @@ function drawSection(
     showErosion,
     erosionRes: m.processing.resolution,
     drawWater: true,
+    // pen up across the constant-fill plateau wedges, exactly like the walls
+    // of the 3D block: strata drawn across the fill boundary collapse into a
+    // needle of slivers
+    skipMask: sec.skip ?? undefined,
   })
 
   // interactive markers, clipped to the plot area like the geology
@@ -543,7 +556,7 @@ function drawSection(
   ctx.clip()
 
   // probe location marker (where the Barrell plot samples)
-  const pj = Math.min(n - 1, probeIndex)
+  const pj = localIndex(sec, probeIndex)
   ctx.beginPath()
   ctx.moveTo(xPix(f, x[pj]) + 0.5, f.y0)
   ctx.lineTo(xPix(f, x[pj]) + 0.5, f.y0 + f.h)
@@ -554,8 +567,8 @@ function drawSection(
   ctx.setLineDash([])
 
   // linked hover ghost
-  if (hover && hover.index !== pj) {
-    const hj = Math.min(n - 1, hover.index)
+  const hj = hover ? localIndex(sec, hover.index) : -1
+  if (hover && hj !== pj) {
     ctx.globalAlpha = 0.45
     ctx.beginPath()
     ctx.moveTo(xPix(f, x[hj]) + 0.5, f.y0)

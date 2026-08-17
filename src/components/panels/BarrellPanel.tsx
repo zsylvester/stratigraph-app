@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { Dataset } from '../../data/loader'
 import { drawFrame, makeFrame, setupCanvas, themeColors, xPix, yPix } from '../../plot/frame'
-import { classify, retroDeform } from '../../strat/core'
+import { classify, localIndex, retroDeform } from '../../strat/core'
 import {
   css,
   FACIES_COLORS,
@@ -12,7 +12,7 @@ import {
   viridis,
 } from '../../strat/colormaps'
 import { useSection } from '../../strat/useSection'
-import { sectionLength, useAppStore } from '../../state/store'
+import { sectionSpanRange, useAppStore } from '../../state/store'
 
 interface Curve {
   times: Float64Array
@@ -74,7 +74,7 @@ export function BarrellPanel({ dataset }: { dataset: Dataset }) {
       } else {
         if (!sectionState) return
         const sec = sectionState.section
-        const j = Math.min(sec.n - 1, probeIndex)
+        const j = localIndex(sec, probeIndex)
         // elevation history at the probe, in the final-datum frame (the datum
         // choice does not affect the classification or geometry of the plot)
         const topoS = retroDeform(sec, sec.nt - 1)
@@ -136,20 +136,22 @@ function ProbeControls({ dataset }: { dataset: Dataset }) {
   const sectionAxis = useAppStore((s) => s.sectionAxis)
   const probeIndex = useAppStore((s) => s.probeIndex)
   const setProbeIndex = useAppStore((s) => s.setProbeIndex)
-  const n = sectionLength(dataset, sectionAxis)
+  const clean = useAppStore((s) => s.clean)
+  // the section only spans the clean sub-grid, so neither does the probe
+  const [lo, hi] = sectionSpanRange(dataset, sectionAxis, clean)
   return (
     <>
       <span className="controls-row__label">location along section</span>
       <input
         type="range"
         className="mini-slider"
-        min={0}
-        max={n - 1}
+        min={lo}
+        max={hi}
         value={probeIndex}
         onChange={(e) => setProbeIndex(Number(e.target.value))}
         aria-label="probe location"
       />
-      <span className="controls-row__readout">{probeIndex}/{n - 1}</span>
+      <span className="controls-row__readout">{probeIndex}/{hi}</span>
     </>
   )
 }
