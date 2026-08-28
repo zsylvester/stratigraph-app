@@ -275,6 +275,10 @@ def main():
     update_index(DATASET_ID, manifest["name"], manifest["description"])
     print(f"{DATASET_ID}: OK")
     report(manifest)
+    print(
+        "NOTE: the bundle was wiped — re-run build_xes02_photos.py to restore "
+        "the overhead-photo textures (textures/ + the manifest entry)."
+    )
 
 
 if __name__ == "__main__":

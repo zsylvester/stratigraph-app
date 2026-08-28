@@ -95,3 +95,30 @@ which is what the Wheeler smoothing loop iterates over.
 `derived/` for grid3d: the six attribute maps from `compute_strat_maps`
 (deposition/erosion/stasis/vacuity time fractions, deposition/erosion thickness) computed
 over the full run, float32 `(nrows, ncols)`.
+
+## textures (optional)
+
+Per-time-step image sequences draped on a surface — e.g. the XES-02 overhead photos on
+the 3D block diagram's top surface (`build_xes02_photos.py`, following the texture cells
+of the XES-02 notebook). Images are pre-warped offline to grid coordinates so the app's
+sampling is a plain affine UV; the empirical photo-to-grid alignment lives entirely in
+the preprocessing script.
+
+```json
+"textures": {
+  "overhead": {
+    "pattern": "textures/step_{step}.webp",  // '{step}' -> step index
+    "stepPad": 3,                            // zero-padding of the index
+    "n": 311,                                // one image per time step
+    "extent": [0, 5500, 0, 2600],            // [x0, x1, y0, y1], space units
+    "size": [1024, 484]
+  }
+}
+```
+
+Conventions: image row 0 = grid row 0 (`v = (y - y0)/(y1 - y0)`, no flip), col 0 = grid
+col 0 (`u = (x - x0)/(x1 - x0)`); extent in grid-node coordinates covering the full grid
+(regions beyond the source photo are edge-replicated, outside-the-tank corners filled
+neutral gray). The app fetches images on demand into a small LRU of GPU textures and
+prefetches ahead during playback, so the whole sequence (~7 MB for XES-02 as WebP) is
+only ever partially resident.

@@ -36,6 +36,25 @@ export interface SpaceSection2d {
   units: string
 }
 
+/**
+ * A per-time-step image sequence draped on a surface (e.g. XES-02 overhead
+ * photos on the 3D block's topography). Images are pre-warped offline to grid
+ * coordinates: row 0 = grid row 0, so u = (x - x0)/(x1 - x0), v = (y - y0)/
+ * (y1 - y0) with extent = [x0, x1, y0, y1] in space units.
+ */
+export interface TextureSet {
+  /** URL pattern relative to the bundle, '{step}' replaced by the step index */
+  pattern: string
+  /** zero-padding width of the step index in filenames */
+  stepPad?: number
+  /** number of images (= time steps) */
+  n: number
+  /** [x0, x1, y0, y1] coverage in grid node coordinates (space units) */
+  extent: [number, number, number, number]
+  size?: [number, number]
+  note?: string
+}
+
 export interface Manifest {
   id: string
   name: string
@@ -50,6 +69,7 @@ export interface Manifest {
   arrays: Record<string, ArrayEntry>
   derived?: Record<string, ArrayEntry>
   assets?: Record<string, { path: string; extent?: number[] }>
+  textures?: Record<string, TextureSet>
   views: Record<string, Record<string, unknown>>
 }
 

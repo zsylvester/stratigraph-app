@@ -79,6 +79,11 @@ export class Dataset {
     return p
   }
 
+  /** Absolute URL of a bundle-relative path (e.g. a texture image). */
+  url(relPath: string): string {
+    return this.base + relPath
+  }
+
   /** Total download size (bytes) of the named arrays, for progress display. */
   byteSize(names: string[]): number {
     const bytes = { int8: 1, int16: 2, float32: 4, float64: 8 }

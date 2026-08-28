@@ -6,6 +6,7 @@ import type { NdArray } from '../../data/ndarray'
 import type { SpaceGrid3d } from '../../data/types'
 import { themeColors } from '../../plot/frame'
 import type { GridClean } from '../../plot/three/gridClean'
+import { createPhotoTextures, PhotoTextures } from '../../plot/three/photoTexture'
 import { createScene, SceneCtl } from '../../plot/three/scene'
 import { buildTopoMesh, TopoDims, TopoMeshCtl } from '../../plot/three/topoMesh'
 import { buildWalls, WallsCtl, WallSpec } from '../../plot/three/wallTexture'
@@ -70,6 +71,11 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
   const [gap, setGap] = useState(0.1)
   // erosional-surface overlay on the wall sections (red), like the 2D panel
   const [showErosion, setShowErosion] = useState(false)
+  // top-surface coloring: elevation/bathymetry, or the overhead photo drape
+  const [surface, setSurface] = useState<'elevation' | 'photo'>('elevation')
+  const photosRef = useRef<PhotoTextures | null>(null)
+  // last texture actually shown: stale-but-close fallback while a step loads
+  const lastTexRef = useRef<THREE.Texture | null>(null)
   // cut modes: show the block on the other side of the cut plane
   const [cutFlip, setCutFlip] = useState(false)
 
@@ -93,6 +99,10 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
     const sceneCtl = createScene(container, () => repaintRef.current?.())
 
     const m = dataset.manifest
+    const texSpec = m.textures?.overhead
+    photosRef.current = texSpec
+      ? createPhotoTextures(dataset, texSpec, sceneCtl.renderer.capabilities.getMaxAnisotropy())
+      : null
     const sp = m.space as SpaceGrid3d
     const [nR, nC] = sp.shape
     const [dRow, dCol] = sp.spacing
@@ -162,6 +172,9 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
 
     return () => {
       cancelled = true
+      photosRef.current?.dispose()
+      photosRef.current = null
+      lastTexRef.current = null
       const blocks = blocksRef.current
       blocksRef.current = null
       baseRef.current = null
@@ -254,6 +267,7 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
           b.topoV, dims, { ...br, ox: br.ox, oz: br.oz },
           clean.bad, clean.exempt, clean.spikeThresh,
           b.subsidV ? (b.subsidV.data as Float32Array) : null,
+          photosRef.current?.spec.extent ?? null,
         )
         topos.push(topo)
         group.add(topo.mesh)
@@ -335,10 +349,31 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
       const k = Math.min(timeStep, b.dims.nt - 1)
       const bins = (m.processing.faciesDepthBins as number[] | undefined) ?? [0, -100]
       b.sceneCtl.setBackground(theme.paper)
+      // photo drape: use the cached texture for this step, else keep showing
+      // the last one (close in time) while the right one loads — like the
+      // walls, the surface trails rather than flashing during playback
+      const photos = surface === 'photo' ? photosRef.current : null
+      let tex: THREE.Texture | null = null
+      if (photos) {
+        tex = photos.get(k)
+        if (tex) {
+          lastTexRef.current = tex
+        } else {
+          tex = lastTexRef.current
+          void photos.load(k).then((t) => {
+            if (stale) return
+            lastTexRef.current = t
+            for (const tp of blocks.topos) tp.update(k, { ...topoOpts, texture: t })
+            b.sceneCtl.requestRender()
+          }).catch(() => {})
+        }
+        photos.prefetch(k + 1, playing ? 8 : 2)
+      }
       const topoOpts = {
         seaLevel: b.seaLevel ? b.seaLevel[k] : null,
         paper: theme.paper,
         range: b.clean.range,
+        texture: tex,
       }
       for (const t of blocks.topos) t.update(k, topoOpts)
       const wallOpts = {
@@ -370,7 +405,7 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
     return () => {
       stale = true
     }
-  }, [ready, blocksVersion, timeStep, colorMode, showErosion, uiTheme, playing, dataset])
+  }, [ready, blocksVersion, timeStep, colorMode, showErosion, uiTheme, playing, dataset, surface])
 
   // vertical exaggeration: a group scale — no geometry or texture rebuilds
   const veRef = useRef(ve)
@@ -472,6 +507,24 @@ export function Panel3D({ dataset, leading }: { dataset: Dataset; leading?: Reac
                 onClick={() => setColorMode(cm)}
               >
                 {cm}
+              </button>
+            ))}
+          </div>
+        )}
+        {dataset.manifest.textures?.overhead && (
+          <div className="seg">
+            {(['elev', 'photo'] as const).map((sm) => (
+              <button
+                key={sm}
+                className={`seg__btn${(sm === 'photo') === (surface === 'photo') ? ' is-active' : ''}`}
+                onClick={() => setSurface(sm === 'photo' ? 'photo' : 'elevation')}
+                title={
+                  sm === 'photo'
+                    ? 'drape the overhead photo on the surface'
+                    : 'color the surface by elevation'
+                }
+              >
+                {sm}
               </button>
             ))}
           </div>

@@ -46,6 +46,12 @@ export interface TopoColorOpts {
   paper: string
   /** fixed elevation color range over the whole run (stable playback colors) */
   range: [number, number]
+  /**
+   * Photo texture draped over the surface instead of elevation colors (the
+   * mesh must have been built with a texExtent). Vertex colors go white so
+   * the map shows unmodulated; heights, normals and lighting are unchanged.
+   */
+  texture?: THREE.Texture | null
 }
 
 export interface TopoMeshCtl {
@@ -78,6 +84,11 @@ export function buildTopoMesh(
    * to it — scan holes dip physically impossibly below the tank floor.
    */
   basement?: Float32Array | null,
+  /**
+   * Photo-texture coverage [x0, x1, y0, y1] in grid node coordinates: builds
+   * the UV attribute so TopoColorOpts.texture can be draped.
+   */
+  texExtent?: [number, number, number, number] | null,
 ): TopoMeshCtl {
   const { nRows, nCols, nt, dRow, dCol } = dims
   const wr = win.r1 - win.r0 + 1
@@ -99,6 +110,20 @@ export function buildTopoMesh(
       normals[v + 1] = 1
     }
   }
+  // UVs from UNOFFSET grid coordinates (exploded sub-blocks share the photo)
+  let uvs: Float32Array | null = null
+  if (texExtent) {
+    const [tx0, tx1, ty0, ty1] = texExtent
+    uvs = new Float32Array(nVerts * 2)
+    for (let r = 0; r < nr; r++) {
+      for (let c = 0; c < nc; c++) {
+        const v = (r * nc + c) * 2
+        uvs[v] = ((win.c0 + c * stride) * dCol - tx0) / (tx1 - tx0)
+        uvs[v + 1] = ((win.r0 + r * stride) * dRow - ty0) / (ty1 - ty0)
+      }
+    }
+  }
+
   const index = new Uint32Array((nr - 1) * (nc - 1) * 6)
   let ii = 0
   for (let r = 0; r < nr - 1; r++) {
@@ -121,6 +146,7 @@ export function buildTopoMesh(
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   geom.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geom.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  if (uvs) geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
   geom.setIndex(new THREE.BufferAttribute(index, 1))
   geom.setDrawRange(0, ii)
 
@@ -205,11 +231,34 @@ export function buildTopoMesh(
     return Math.abs(v - med) > spikeThresh ? med : v
   }
 
+  // photo mode caches: recompiling the material (map on/off) and flushing the
+  // color buffer only happen on actual transitions, not every playback step
+  let colorsWhite = false
+
   const update = (k: number, opts: TopoColorOpts) => {
     const [vmin, vmax] = opts.range
     const span = vmax - vmin || 1
     const sl = opts.seaLevel
     const [pr, pg, pb] = hexToRgb(opts.paper)
+
+    const tex = opts.texture ?? null
+    if (tex !== mat.map) {
+      const hadMap = !!mat.map
+      mat.map = tex
+      // adding/removing the map changes the shader; swapping textures doesn't
+      if (hadMap !== !!tex) mat.needsUpdate = true
+    }
+    if (tex) {
+      // map * white = the photo; skip the per-vertex color computation
+      if (!colorsWhite) {
+        colors.fill(1)
+        geom.attributes.color.needsUpdate = true
+        colorsWhite = true
+      }
+      updateHeights(k, vmin)
+      return
+    }
+    colorsWhite = false
 
     for (let r = 0; r < nr; r++) {
       for (let c = 0; c < nc; c++) {
@@ -239,6 +288,23 @@ export function buildTopoMesh(
       }
     }
 
+    geom.attributes.color.needsUpdate = true
+    finishGeometry()
+  }
+
+  /** heights only (photo mode: colors are a constant white) */
+  function updateHeights(k: number, vmin: number) {
+    for (let r = 0; r < nr; r++) {
+      for (let c = 0; c < nc; c++) {
+        const y = sample(win.r0 + r * stride, win.c0 + c * stride, k)
+        positions[(r * nc + c) * 3 + 1] = Number.isFinite(y) ? y : vmin
+      }
+    }
+    finishGeometry()
+  }
+
+  /** normals from the updated heightfield + attribute flags */
+  function finishGeometry() {
     // heightfield normals by central differences (one-sided at the borders);
     // vertical exaggeration is a parent scale, corrected by the normalMatrix
     const dx = stride * dCol
@@ -259,9 +325,7 @@ export function buildTopoMesh(
         normals[vi + 2] = -gz * inv
       }
     }
-
     geom.attributes.position.needsUpdate = true
-    geom.attributes.color.needsUpdate = true
     geom.attributes.normal.needsUpdate = true
     geom.computeBoundingSphere()
   }
