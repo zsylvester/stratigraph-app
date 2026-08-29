@@ -145,6 +145,7 @@ export function themeColors(el: HTMLElement) {
   const get = (n: string, fb: string) => cs.getPropertyValue(n).trim() || fb
   return {
     ink: get('--ink', '#2a2318'),
+    geoLine: get('--geo-line', '#17181c'),
     inkSoft: get('--ink-soft', '#7a6c54'),
     faint: get('--line-strong', '#b5a888'),
     paper: get('--paper', '#f6f1e7'),

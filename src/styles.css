@@ -21,6 +21,11 @@
   --ero: #a34a24;   /* erosion */
   --vac: #b3b1ab;   /* vacuity */
 
+  /* linework drawn OVER the geology fills (stratigraphic surfaces, the
+     topographic surface) — the fills don't flip with the theme, so this
+     stays dark in dark mode too (no override in the dark block) */
+  --geo-line: #17181c;
+
   --font-display: 'Archivo', 'Helvetica Neue', sans-serif;
   --font-ui: 'Archivo', 'Helvetica Neue', sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'Menlo', monospace;

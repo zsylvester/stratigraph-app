@@ -23,6 +23,9 @@ import { Frame, xPix, yPix } from './frame'
 /** Theme colors used by the painter (a subset of plot/frame's themeColors). */
 export interface SectionTheme {
   ink: string
+  /** linework over the geology fills; dark in BOTH themes (the fills are
+   *  theme-independent, so light-on-yellow linework would wash out) */
+  geoLine: string
   inkSoft: string
   paper3: string
   dep: string
@@ -288,7 +291,7 @@ export function paintSectionBody(
   const lineFreq = Math.max(1, Math.ceil(nt / 80))
   const lineScale = opts.lineScale ?? 1
   const lineAlpha = opts.lineAlpha ?? 0.55
-  ctx.strokeStyle = theme.ink
+  ctx.strokeStyle = theme.geoLine
   for (let i = 0; i <= kk; i++) {
     const isKey = keys.has(i)
     if (!isKey && i % lineFreq !== 0) continue
@@ -317,7 +320,7 @@ export function paintSectionBody(
       else ctx.lineTo(px, py)
     }
   }
-  ctx.strokeStyle = theme.ink
+  ctx.strokeStyle = theme.geoLine
   ctx.lineWidth = 1.4 * lineScale
   ctx.stroke()
 
