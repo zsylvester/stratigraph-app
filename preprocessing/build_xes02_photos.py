@@ -15,13 +15,14 @@ alignment offline so the app's mapping is trivial:
 - the photo is warped (bilinear) onto a canvas covering the FULL grid-node extent
   x in [0, 5500] mm (dip), y in [0, 2600] mm (strike), row 0 = grid row 0, so the
   app's UVs are just u = x/5500, v = y/2600 regardless of the display crop;
-- the dip extent beyond photo coverage is handled per end: the proximal ~220 mm
-  is edge-replicated (it continues the entrance channel), while the distal
-  ~1270 mm — permanently subaqueous deep basin the camera never saw — fades
-  over ~150 mm from the photo's edge into the photo's own median deep-water
-  color, so no streak artifacts are smeared across the basin;
-- the black outside-the-tank corner triangles are filled with neutral gray
-  (the notebook masks these; the app renders them as the plateau shoulders);
+- regions that are not photo coverage of sediment are neutral gray: the
+  fix_corners plateau triangles (+2-cell dilation, matching gridClean's exempt
+  shoulders — the photo only shows tank wall there, which draped purple), the
+  proximal strip before photo coverage (x < ~222 mm, where edge replication
+  smeared the inlet apparatus into black/white stripes), and any remaining
+  outside-the-tank black; the distal ~1270 mm — permanently subaqueous deep
+  basin the camera never saw — instead fades over ~150 mm into the photo's own
+  median deep-water color;
 - written as WebP, textures/step_{k}.webp, one per time step.
 
 QC: warped photos with the topo-derived shoreline contour overlaid, to verify the
@@ -85,6 +86,32 @@ def warp_photo(im):
     return out
 
 
+GRAY = 212.0
+
+
+def shoulder_weight():
+    """Blend weight (1 = gray) over the canvas: the fix_corners plateau
+    triangles + 2-cell dilation (covering gridClean's exempt shoulders and the
+    purple tank-wall band that would drape onto them), and the proximal strip
+    left of photo coverage, blended over ~30 mm into the photo."""
+    r_idx, c_idx = np.indices((261, 111))
+    tri = (r_idx < -5.3 * c_idx + 125) | (r_idx > 5.3 * c_idx + 125)
+    plus = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], bool)
+    tri = ndimage.binary_dilation(tri, structure=plus, iterations=2)
+    i = np.arange(OUT_H)
+    j = np.arange(OUT_W)
+    y = (i + 0.5) * (EXTENT[3] - EXTENT[2]) / OUT_H + EXTENT[2]
+    x = (j + 0.5) * (EXTENT[1] - EXTENT[0]) / OUT_W + EXTENT[0]
+    rr = np.clip(np.round(y / 10.0).astype(int), 0, 260)
+    cc = np.clip(np.round(x / 50.0).astype(int), 0, 110)
+    w = tri[np.ix_(rr, cc)].astype(np.float32)
+    # proximal strip: gray left of the first photo column, ~30 mm blend after
+    x_photo0 = 50.0 * ((COL_OFF + 0.5) * IN_COLS / RS_COLS_FULL - 0.5)
+    BLEND_MM = 30.0
+    t = np.clip((x_photo0 + BLEND_MM - x) / BLEND_MM, 0.0, 1.0)
+    return np.maximum(w, t[None, :])
+
+
 def fade_distal(out, imf):
     """Beyond the photo's distal edge: fade to the median deep-water color."""
     # median RGB of the photo's outermost valid columns (robust to artifacts)
@@ -112,7 +139,7 @@ def fill_black_corners(out):
     mask = np.isin(lab, list(border_labels))
     # grow one px to swallow the dark antialiased rim
     mask = ndimage.binary_dilation(mask, iterations=2)
-    out[mask] = 212.0
+    out[mask] = GRAY
     return out
 
 
@@ -129,6 +156,7 @@ def main():
 
     tex_dir = bundle / "textures"
     tex_dir.mkdir(exist_ok=True)
+    shoulder_w = shoulder_weight()
     total = 0
     max_dt = 0
     for k in range(nt):
@@ -137,6 +165,7 @@ def main():
         im = Image.open(fnames[ind]).convert("RGB")
         imf = np.asarray(im, dtype=np.float32)
         out = fill_black_corners(fade_distal(warp_photo(im), imf))
+        out = out * (1 - shoulder_w[:, :, None]) + GRAY * shoulder_w[:, :, None]
         img = Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8))
         path = tex_dir / f"step_{k:03d}.webp"
         img.save(path, "WEBP", quality=WEBP_QUALITY, method=6)

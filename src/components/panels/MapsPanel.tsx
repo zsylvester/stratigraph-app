@@ -6,6 +6,7 @@ import type { SpaceGrid3d } from '../../data/types'
 import { drawHColorbar } from '../../plot/colorbar'
 import { boxBlur3, contourLevels, drawContour } from '../../plot/contours'
 import { themeColors } from '../../plot/frame'
+import { loadPhotoBitmap, peekPhotoBitmap, prefetchPhotoBitmaps } from '../../plot/photoBitmap'
 import { deepR, hexToRgb } from '../../strat/colormaps'
 import { sectionSpanRange, useAppStore } from '../../state/store'
 
@@ -14,7 +15,7 @@ const Panel3D = lazy(() =>
   import('./Panel3D').then((m) => ({ default: m.Panel3D })),
 )
 
-type MapMode = 'topography' | 'thickness'
+type MapMode = 'topography' | 'thickness' | 'photo'
 
 /** ms between thickness recomputes while the time step is moving */
 const RECOMPUTE_THROTTLE = 150
@@ -31,8 +32,10 @@ interface Volumes {
 
 /**
  * Map view: contoured topography at the current time step (shoreline
- * highlighted), or contoured deposit thickness accumulated up to it.
- * Doubles as the section picker: click/drag moves the section.
+ * highlighted), contoured deposit thickness accumulated up to it, or — when
+ * the dataset ships overhead-photo textures — the photo in plan view with
+ * the topo-derived shoreline on top. Doubles as the section picker:
+ * click/drag moves the section.
  */
 export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const timeStep = useAppStore((s) => s.timeStep)
@@ -58,6 +61,12 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   const [dRow, dCol] = space.spacing
   const nt = dataset.manifest.time.n
   const nLoc = nRows * nCols
+
+  // photo mode only exists for datasets that ship overhead textures
+  const hasPhoto = !!dataset.manifest.textures?.overhead
+  useEffect(() => {
+    if (!hasPhoto && mode === 'photo') setMode('topography')
+  }, [hasPhoto, mode])
 
   useEffect(() => {
     let cancelled = false
@@ -104,13 +113,13 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
     const run = () => {
       lastRunRef.current = performance.now()
       const data =
-        mode === 'topography'
-          ? topoSlice(volumes.topo, volumes.subsid, nRows, nCols, kk)
-          : computeThickness(volumes.topo, volumes.subsid, nLoc, nt, kk)
+        mode === 'thickness'
+          ? computeThickness(volumes.topo, volumes.subsid, nLoc, nt, kk)
+          : topoSlice(volumes.topo, volumes.subsid, nRows, nCols, kk)
       setField({ data: boxBlur3(data, nRows, nCols), k: kk, mode })
     }
-    if (mode === 'topography') {
-      run() // just a slice + blur, cheap enough per frame
+    if (mode !== 'thickness') {
+      run() // just a slice + blur (photo mode: for the shoreline contour)
       return
     }
     const since = performance.now() - lastRunRef.current
@@ -125,17 +134,34 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !field || !volumes) return
-    const draw = () =>
+    let cancelled = false
+    const texSpec = dataset.manifest.textures?.overhead
+    const draw = () => {
+      let photo: ImageBitmap | null = null
+      if (field.mode === 'photo' && texSpec) {
+        photo = peekPhotoBitmap(dataset, field.k)
+        if (!photo) {
+          // draw without it now, again when it lands (playback: it trails)
+          void loadPhotoBitmap(dataset, texSpec, field.k).then(() => {
+            if (!cancelled) draw()
+          }).catch(() => {})
+        }
+        prefetchPhotoBitmaps(dataset, texSpec, field.k + 1, 3)
+      }
       drawMap(
         canvas, field, volumes, dataset, sectionAxis, sectionIndex, hover, xZoom, probeIndex,
-        sectionSpanRange(dataset, sectionAxis, clean),
+        sectionSpanRange(dataset, sectionAxis, clean), photo,
       )
+    }
     draw()
     // the canvas is sized by drawMap to fit its wrapper at the physical
     // aspect ratio, so watch the wrapper, not the canvas
     const ro = new ResizeObserver(draw)
     ro.observe(canvas.parentElement ?? canvas)
-    return () => ro.disconnect()
+    return () => {
+      cancelled = true
+      ro.disconnect()
+    }
   }, [field, volumes, dataset, sectionAxis, sectionIndex, hover, uiTheme, xZoom, probeIndex, clean])
 
   const moveSection = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -181,7 +207,9 @@ export function MapsPanel({ dataset }: { dataset: Dataset }) {
       <div className="controls-row">
         {viewSeg}
         <div className="seg">
-          {(['topography', 'thickness'] as const).map((mm) => (
+          {(
+            ['topography', 'thickness', ...(hasPhoto ? ['photo' as const] : [])] as MapMode[]
+          ).map((mm) => (
             <button
               key={mm}
               className={`seg__btn${mm === mode ? ' is-active' : ''}`}
@@ -303,10 +331,13 @@ function drawMap(
   probeIndex: number,
   /** inclusive grid index range the section actually spans */
   span: [number, number],
+  /** decoded overhead photo for this step (photo mode), or null */
+  photo: ImageBitmap | null,
 ) {
   const theme = themeColors(canvas)
   const space = dataset.manifest.space as SpaceGrid3d
   const [nRows, nCols] = space.shape
+  const [dRow, dCol] = space.spacing
   const { data, k, mode } = field
 
   // contain-fit the canvas inside its wrapper at the TRUE physical aspect
@@ -324,33 +355,10 @@ function drawMap(
     canvas.style.height = `${chh}px`
   }
   const sl = volumes.seaLevel ? volumes.seaLevel[k] : null
-  const [vmin, vmax] = mode === 'topography' ? volumes.topoRange : volumes.thicknessRange
+  const isPhoto = mode === 'photo'
+  const [vmin, vmax] = mode === 'thickness' ? volumes.thicknessRange : volumes.topoRange
   const [pr, pg, pb] = hexToRgb(theme.paper) // subaerial wash target
   const [ir, ig, ib] = hexToRgb(theme.ink) // contour line color
-
-  // fill
-  const img = new ImageData(nCols, nRows)
-  for (let r = 0; r < nRows; r++) {
-    for (let c = 0; c < nCols; c++) {
-      const v = data[r * nCols + c]
-      const p = (r * nCols + c) * 4
-      if (!Number.isFinite(v)) {
-        img.data[p + 3] = 0
-        continue
-      }
-      let [rr, gg, bb] = deepR((v - vmin) / (vmax - vmin || 1))
-      if (mode === 'topography' && sl !== null && v >= sl) {
-        // subaerial: wash toward the paper color so land reads as land
-        rr = rr + (pr - rr) * 0.55
-        gg = gg + (pg - gg) * 0.55
-        bb = bb + (pb - bb) * 0.55
-      }
-      img.data[p] = rr
-      img.data[p + 1] = gg
-      img.data[p + 2] = bb
-      img.data[p + 3] = 255
-    }
-  }
 
   const dpr = window.devicePixelRatio || 1
   const w = canvas.clientWidth
@@ -360,38 +368,75 @@ function drawMap(
   canvas.height = h * dpr
   const ctx = canvas.getContext('2d')!
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-  const off = new OffscreenCanvas(nCols, nRows)
-  off.getContext('2d')!.putImageData(img, 0, 0)
   ctx.imageSmoothingEnabled = true
   ctx.fillStyle = theme.paper
   ctx.fillRect(0, 0, w, h)
-  ctx.drawImage(off, 0, 0, w, h)
+
+  if (isPhoto) {
+    // the photo canvas covers the grid-NODE extent; nodes sit at cell
+    // centers of the nCols x nRows raster the rest of the map draws in
+    if (photo) {
+      const spec = dataset.manifest.textures!.overhead
+      const [x0, x1, y0, y1] = spec.extent
+      const px = (x: number) => ((x / dCol + 0.5) / nCols) * w
+      const py = (y: number) => ((y / dRow + 0.5) / nRows) * h
+      ctx.drawImage(photo, px(x0), py(y0), px(x1) - px(x0), py(y1) - py(y0))
+    }
+  } else {
+    // fill
+    const img = new ImageData(nCols, nRows)
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nCols; c++) {
+        const v = data[r * nCols + c]
+        const p = (r * nCols + c) * 4
+        if (!Number.isFinite(v)) {
+          img.data[p + 3] = 0
+          continue
+        }
+        let [rr, gg, bb] = deepR((v - vmin) / (vmax - vmin || 1))
+        if (mode === 'topography' && sl !== null && v >= sl) {
+          // subaerial: wash toward the paper color so land reads as land
+          rr = rr + (pr - rr) * 0.55
+          gg = gg + (pg - gg) * 0.55
+          bb = bb + (pb - bb) * 0.55
+        }
+        img.data[p] = rr
+        img.data[p + 1] = gg
+        img.data[p + 2] = bb
+        img.data[p + 3] = 255
+      }
+    }
+    const off = new OffscreenCanvas(nCols, nRows)
+    off.getContext('2d')!.putImageData(img, 0, 0)
+    ctx.drawImage(off, 0, 0, w, h)
+  }
 
   // contours (grid samples at cell centers)
   const toPx = (col: number, row: number): [number, number] => [
     ((col + 0.5) / nCols) * w,
     ((row + 0.5) / nRows) * h,
   ]
-  // datasets can tune contour density via views.map.contourLevels
-  const nLevels =
-    ((dataset.manifest.views.map as { contourLevels?: number } | undefined)?.contourLevels) ?? 28
-  ctx.strokeStyle = `rgba(${ir}, ${ig}, ${ib}, 0.45)`
-  ctx.lineWidth = 0.7
-  for (const level of contourLevels(vmin, vmax, nLevels)) {
-    if (mode === 'thickness' && level <= 0) continue
-    drawContour(ctx, data, nRows, nCols, level, toPx)
+  if (!isPhoto) {
+    // datasets can tune contour density via views.map.contourLevels
+    const nLevels =
+      ((dataset.manifest.views.map as { contourLevels?: number } | undefined)?.contourLevels) ?? 28
+    ctx.strokeStyle = `rgba(${ir}, ${ig}, ${ib}, 0.45)`
+    ctx.lineWidth = 0.7
+    for (const level of contourLevels(vmin, vmax, nLevels)) {
+      if (mode === 'thickness' && level <= 0) continue
+      drawContour(ctx, data, nRows, nCols, level, toPx)
+    }
   }
 
-  // shoreline: contour of topography at the current sea level
-  if (mode === 'topography' && sl !== null) {
+  // shoreline: contour of topography at the current sea level (in photo
+  // mode it doubles as a registration check against the photo's waterline)
+  if (mode !== 'thickness' && sl !== null) {
     ctx.strokeStyle = theme.dep
     ctx.lineWidth = 2
     drawContour(ctx, data, nRows, nCols, sl, toPx)
   }
 
   // section trace; the cross-section's current zoom window is the thick part
-  const [dRow, dCol] = space.spacing
   // along-section distance -> map px (grid samples sit at cell centers)
   const alongPx = (dist: number) =>
     sectionAxis === 'dip'
@@ -468,14 +513,16 @@ function drawMap(
   ctx.lineWidth = 1
   ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
 
-  // colorbar, bottom right
-  drawHColorbar(
-    ctx, w - 130, h - 34, 110, deepR, vmin, vmax,
-    mode === 'topography'
-      ? `elevation (${dataset.manifest.elevationUnits})`
-      : `thickness (${dataset.manifest.elevationUnits})`,
-    { ink: theme.ink, faint: theme.faint, paper: theme.paper },
-  )
+  // colorbar, bottom right (scalar modes only)
+  if (!isPhoto) {
+    drawHColorbar(
+      ctx, w - 130, h - 34, 110, deepR, vmin, vmax,
+      mode === 'topography'
+        ? `elevation (${dataset.manifest.elevationUnits})`
+        : `thickness (${dataset.manifest.elevationUnits})`,
+      { ink: theme.ink, faint: theme.faint, paper: theme.paper },
+    )
+  }
 
   // caption
   ctx.font = '10px "Geist Mono", monospace'
@@ -483,9 +530,11 @@ function drawMap(
   ctx.textBaseline = 'bottom'
   const units = dataset.manifest.elevationUnits
   const label =
-    mode === 'topography'
-      ? `topography at step ${k + 1}${sl !== null ? ` · shoreline at ${sl.toFixed(0)} ${units}` : ''}`
-      : `deposit thickness up to step ${k + 1} · 0 to ${vmax.toFixed(0)} ${units}`
+    mode === 'photo'
+      ? `overhead photo at step ${k + 1}${sl !== null ? ` · shoreline at ${sl.toFixed(0)} ${units}` : ''}`
+      : mode === 'topography'
+        ? `topography at step ${k + 1}${sl !== null ? ` · shoreline at ${sl.toFixed(0)} ${units}` : ''}`
+        : `deposit thickness up to step ${k + 1} · 0 to ${vmax.toFixed(0)} ${units}`
   ctx.lineWidth = 3
   ctx.strokeStyle = theme.paper
   ctx.strokeText(label, 6, h - 5)
