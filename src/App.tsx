@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 import { Header } from './components/Header'
+import { InfoOverlay } from './components/InfoOverlay'
 import { PanelGrid } from './components/PanelGrid'
 import { TimelineBar } from './components/TimelineBar'
 import { useKeyboardShortcuts, usePlaybackLoop } from './state/playback'
@@ -12,6 +13,7 @@ export default function App() {
   const dataset = useAppStore((s) => s.dataset)
   const loadError = useAppStore((s) => s.loadError)
   const theme = useAppStore((s) => s.theme)
+  const infoView = useAppStore((s) => s.infoView)
 
   useEffect(() => {
     void init()
@@ -38,6 +40,7 @@ export default function App() {
         <div className="loading">loading dataset…</div>
       )}
       <TimelineBar />
+      {infoView && <InfoOverlay />}
     </div>
   )
 }

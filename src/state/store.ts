@@ -51,6 +51,9 @@ interface AppState {
   /** panel key currently maximized to fill the grid, or null */
   expandedPanel: string | null
 
+  /** info overlay tab currently open (datasets & credits / user guide), or null */
+  infoView: 'datasets' | 'guide' | null
+
   /**
    * Zoomed distance range along the section, shared by the cross section and
    * the Wheeler diagram so their x-axes never diverge; null = full extent.
@@ -71,6 +74,7 @@ interface AppState {
   toggleTheme: () => void
   setXZoom: (z: [number, number] | null) => void
   toggleExpandedPanel: (key: string) => void
+  setInfoView: (v: 'datasets' | 'guide' | null) => void
 }
 
 function initialTheme(): 'light' | 'dark' {
@@ -142,6 +146,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hover: null,
   theme: initialTheme(),
   expandedPanel: null,
+  infoView: null,
   xZoom: null,
 
   init: async () => {
@@ -252,4 +257,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleExpandedPanel: (key) =>
     set({ expandedPanel: get().expandedPanel === key ? null : key }),
+
+  setInfoView: (v) => set({ infoView: v }),
 }))

@@ -43,6 +43,8 @@ export function useKeyboardShortcuts() {
       const el = e.target as HTMLElement
       if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')
         return
+      // arrows should scroll the info overlay, not scrub the timeline
+      if (useAppStore.getState().infoView) return
       const { togglePlaying, stepBy } = useAppStore.getState()
       if (e.code === 'Space') {
         e.preventDefault()

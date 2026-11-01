@@ -261,6 +261,20 @@ body {
   text-decoration-color: var(--ink);
 }
 
+/* subhead links that open the info overlay (buttons, not anchors) */
+.subhead__link--btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.theme-toggle--info {
+  margin-right: 0;
+}
+
 /* ------------------------------ panel grid ------------------------------ */
 
 .grid {
@@ -785,6 +799,264 @@ body {
 
   .timeline__hint {
     display: none;
+  }
+}
+
+/* ------------------------- info overlay (about/guide) ------------------- */
+
+.info-overlay {
+  position: fixed;
+  inset: 0;
+  /* the app's only stacking context so far; keep this its one z-index */
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+.info-overlay__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 48px));
+  max-height: 85dvh;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+}
+
+.info-overlay__head {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--paper-2);
+  flex: none;
+}
+
+.info-overlay__tabs {
+  display: flex;
+}
+
+.info-overlay__tab {
+  appearance: none;
+  border: none;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.info-overlay__tab:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
+.info-overlay__tab.is-active {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.info-overlay__close {
+  appearance: none;
+  margin-left: auto;
+  width: 38px;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-overlay__close:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
+.info-overlay__body {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 22px 26px;
+}
+
+.info-content__intro {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin-bottom: 20px;
+}
+
+.info-entry {
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--line);
+}
+
+.info-entry__title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.info-entry.is-current .info-entry__title {
+  color: var(--ink);
+}
+
+.info-entry__badge {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--paper);
+  background: var(--ink);
+  padding: 1px 6px;
+}
+
+.info-entry__body {
+  font-size: 13.5px;
+  color: var(--ink);
+  max-width: 62ch;
+  margin-bottom: 10px;
+}
+
+.info-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  max-width: 62ch;
+}
+
+.info-meta dt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  padding-top: 1px;
+}
+
+.info-meta dd {
+  color: var(--ink-soft);
+}
+
+.info-refs {
+  list-style: none;
+  max-width: 68ch;
+}
+
+.info-refs__item {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 3px 0 3px 14px;
+  text-indent: -14px; /* hanging indent */
+}
+
+.info-links {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.verify-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ero);
+  border: 1px solid var(--ero);
+  padding: 0 5px;
+  margin-left: 6px;
+  text-indent: 0;
+  display: inline-block;
+}
+
+/* guide action/input table */
+.info-table {
+  display: grid;
+  grid-template-columns: 1fr max-content;
+  align-items: baseline;
+  max-width: 68ch;
+}
+
+.info-table__action,
+.info-table__input {
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.info-table__action {
+  color: var(--ink);
+  padding-right: 16px;
+}
+
+.info-table__note {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.info-table__input {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  border: 1px solid var(--line-strong);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* on-screen control (button/slider) rather than a key or gesture */
+.kbd--ui {
+  border-style: dashed;
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .info-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .info-overlay__panel {
+    width: 100%;
+    max-height: none;
+    height: 100dvh;
+    border: none;
+  }
+
+  .info-overlay__body {
+    padding: 14px 16px 30px;
+  }
+
+  /* stack the guide table: inputs under the action, not beside it */
+  .info-table {
+    grid-template-columns: 1fr;
+  }
+
+  .info-table__input {
+    border-top: none;
+    padding-top: 0;
+    justify-content: flex-start;
   }
 }
 

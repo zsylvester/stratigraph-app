@@ -15,6 +15,7 @@ export interface UrlState {
   sec?: number
   p?: number
   cm?: 'age' | 'facies'
+  info?: 'datasets' | 'guide'
 }
 
 export function parseHash(): UrlState {
@@ -35,6 +36,8 @@ export function parseHash(): UrlState {
   if (ax === 'dip' || ax === 'strike') out.ax = ax
   const cm = params.get('cm')
   if (cm === 'age' || cm === 'facies') out.cm = cm
+  const info = params.get('info')
+  if (info === 'datasets' || info === 'guide') out.info = info
   return out
 }
 
@@ -48,6 +51,7 @@ export function applyUrlState(u: UrlState): void {
   if (u.p !== undefined) s.setProbeIndex(u.p)
   if (u.cm !== undefined) s.setSectionColorMode(u.cm)
   if (u.t !== undefined) s.setTimeStep(u.t)
+  if (u.info !== undefined) s.setInfoView(u.info)
 }
 
 /** Keep the location hash in sync with the store (debounced). */
@@ -69,6 +73,8 @@ export function useUrlSync(): void {
           params.set('p', String(s.probeIndex))
           params.set('cm', s.sectionColorMode)
         }
+        // only when open, so the default URL stays clean
+        if (s.infoView) params.set('info', s.infoView)
         history.replaceState(null, '', `#${params.toString()}`)
       }, 250)
     })

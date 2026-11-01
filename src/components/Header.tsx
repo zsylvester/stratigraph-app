@@ -7,6 +7,14 @@ export function Header() {
   const selectDataset = useAppStore((s) => s.selectDataset)
   const theme = useAppStore((s) => s.theme)
   const toggleTheme = useAppStore((s) => s.toggleTheme)
+  const setInfoView = useAppStore((s) => s.setInfoView)
+
+  // "about" opens the credits scrolled to the active dataset's entry
+  const openAbout = () => {
+    setInfoView('datasets')
+    const id = useAppStore.getState().datasetId
+    if (id) requestAnimationFrame(() => document.getElementById(`ds-${id}`)?.scrollIntoView())
+  }
 
   return (
     <>
@@ -45,6 +53,14 @@ export function Header() {
           ))}
         </nav>
         <button
+          className="theme-toggle theme-toggle--info"
+          onClick={() => setInfoView('guide')}
+          title="datasets & user guide"
+          aria-label="open datasets & user guide"
+        >
+          <InfoIcon />
+        </button>
+        <button
           className="theme-toggle"
           onClick={toggleTheme}
           title={`switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
@@ -57,6 +73,17 @@ export function Header() {
         <span className="subhead__desc">{dataset?.manifest.description ?? '…'}</span>
         <span className="subhead__right">
           <span className="subhead__cite">{dataset?.manifest.citation ?? ''} · </span>
+          <button className="subhead__link subhead__link--btn" onClick={openAbout}>
+            about
+          </button>
+          {' · '}
+          <button
+            className="subhead__link subhead__link--btn"
+            onClick={() => setInfoView('guide')}
+          >
+            guide
+          </button>
+          {' · '}
           <a
             className="subhead__link"
             href="https://zsylvester.github.io/papers/stratigraphy_space_time/"
@@ -77,6 +104,16 @@ export function Header() {
         </span>
       </div>
     </>
+  )
+}
+
+function InfoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <line x1="7" y1="6.2" x2="7" y2="10" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="7" cy="4" r="0.9" fill="currentColor" />
+    </svg>
   )
 }
 
