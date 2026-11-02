@@ -153,12 +153,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const index = await fetchIndex()
       set({ datasets: index.datasets })
-      // dataset from the URL hash when valid, else the first in the index
+      // dataset from the URL hash when valid; else land on XES-02 (the
+      // picker keeps the index's historical order)
       const url = parseHash()
       const id =
         url.d && index.datasets.some((d) => d.id === url.d)
           ? url.d
-          : index.datasets[0]?.id
+          : index.datasets.find((d) => d.id === 'xes02')?.id ?? index.datasets[0]?.id
       if (id) {
         await get().selectDataset(id)
         applyUrlState(url)
